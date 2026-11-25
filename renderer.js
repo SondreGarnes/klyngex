@@ -422,6 +422,7 @@ manualButton.onclick = async () => {
 api.hooksState().then(({ on }) => showManual(on));
 
 document.getElementById('settings').onclick = () => api.openSettings();
+api.version().then((v) => { document.getElementById('version').textContent = `Klyngex ${v}`; });
 
 document.getElementById('new').onclick = () => addTerminal(activeCwd());
 // The folder chooser opens at the current terminal's folder; cancelling does nothing.

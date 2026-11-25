@@ -179,6 +179,7 @@ ipcMain.on('pty:resize', (_e, id, cols, rows) => ptys.get(id)?.resize(cols, rows
 ipcMain.on('pty:kill', (_e, id) => ptys.get(id)?.kill());
 ipcMain.on('flash', (_e, on) => win.flashFrame(on && !win.isFocused()));
 ipcMain.on('show-window', showWindow);
+ipcMain.handle('version', () => app.getVersion());
 ipcMain.handle('launch-dir', () => { const dir = launchDir; launchDir = null; return dir; });
 ipcMain.handle('pick-folder', async (_e, startAt) => {
   const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'], defaultPath: startAt });

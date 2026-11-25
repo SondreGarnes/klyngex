@@ -32,6 +32,7 @@
   #options { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; border-top: 1px solid #2c2c2c; }
   #options button { flex: 1 1 40%; white-space: nowrap; font-size: 12px; }
   #help { padding: 0 8px 8px; font-size: 11px; color: #777; line-height: 1.6; }
+  #version { padding: 0 8px 8px; font-size: 11px; color: #666; }
   #help summary { cursor: pointer; color: #999; padding: 2px 0; }
   .item[draggable="true"] { -webkit-user-drag: element; }
   #search { position: fixed; top: 14px; right: 22px; display: flex; gap: 4px; padding: 6px; background: #2c2c2c; border: 1px solid #555; border-radius: 4px; box-shadow: 0 4px 14px #000a; }
@@ -90,6 +91,7 @@
       Double-click a name to rename<br>
       Drag a name to reorder
     </details>
+    <div id="version"></div>
   </div>
   <div id="panes"></div>
   <div id="search" hidden>

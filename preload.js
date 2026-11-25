@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   openSettings: () => ipcRenderer.send('open-settings'),
   hooksState: () => ipcRenderer.invoke('hooks:state'),
   setHooks: (on) => ipcRenderer.invoke('hooks:set', on),
+  version: () => ipcRenderer.invoke('version'),
   launchDir: () => ipcRenderer.invoke('launch-dir'),
   onOpenDir: (cb) => ipcRenderer.on('open-dir', (_e, dir) => cb(dir)),
   onData: (cb) => ipcRenderer.on('pty:data', (_e, id, data) => cb(id, data)),
