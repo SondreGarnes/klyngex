@@ -17,6 +17,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node test.js
-      - run: npx electron-builder --win --publish always
+      - run: npx electron-builder --win --publish never
+      # One explicit step creates the release. Letting electron-builder publish created two
+      # releases for the same tag, because it uploads its files in parallel.
+      - run: gh release create "${{ github.ref_name }}" dist/Klyngex-Setup.exe dist/Klyngex-Setup.exe.blockmap dist/latest.yml --title "Klyngex ${{ github.ref_name }}" --generate-notes --latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
