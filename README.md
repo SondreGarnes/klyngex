@@ -72,7 +72,7 @@ Shell and agent changes apply to the next terminal you open. Following `cd` in t
 
 - **Claude Code agents started from the app** are launched with `--settings claude-hooks.json`. Its hooks send Claude Code's own event to a small server that Klyngex runs on `127.0.0.1`, using a per-terminal address in the `KLYNGEX_HOOK` environment variable. Nothing is added to your own Claude Code settings.
 - **Claude Code sessions you start by typing `claude`** are tracked the same way if you tick that option on the settings page. That adds the same hooks to your Claude Code `settings.json` (a backup is saved next to it) and switching it off removes them again. The hooks do nothing outside Klyngex.
-- **Everything else** uses a rule of thumb: output that arrived while you were not looking, followed by 2.5 seconds of silence, or a terminal bell. A long silent command can trip it.
+- **Everything else** uses a rule of thumb. A terminal is flagged when output arrived while you were not looking and then stopped, and either the shell is back at its prompt (the command finished) or the output was a long unbroken stretch (an agent working, then stopping). Something that keeps running and prints now and then, like a dev server, is not flagged. A terminal bell always flags. Knowing that a command finished needs the shell to report its prompt, which PowerShell does out of the box here.
 
 ## Development
 

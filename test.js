@@ -1,7 +1,8 @@
 const assert = require('assert');
-const { QUIET_MS, onOutput, onTick, onHook, statusOf } = require('./status');
+const { QUIET_MS, SUSTAINED_MS, onOutput, onTick, onHook, statusOf } = require('./status');
 
-const t = {};
+// A shell whose command has finished: it is back at its prompt.
+const t = { atPrompt: true };
 assert.equal(statusOf(t), 'idle');
 
 // Output nobody saw, then quiet: flag it.
@@ -26,6 +27,26 @@ onOutput(t, 20000, true);
 onOutput(t, 21000, false);
 onTick(t, 21000 + QUIET_MS);
 assert.equal(statusOf(t), 'attention');
+
+// --- Something still running (no prompt since the command was entered) ---
+// A dev server logging a request now and then: short bursts, never flagged.
+const server = { atPrompt: false };
+for (const at of [0, 10000, 20000]) {
+  onOutput(server, at, false);
+  onOutput(server, at + 800, false);
+  onTick(server, at + 800 + QUIET_MS);
+  assert.equal(statusOf(server), 'idle');
+}
+// An agent without hooks: a long unbroken stretch of output, then it stops. Flagged.
+const agent = { atPrompt: false };
+for (let at = 0; at <= SUSTAINED_MS; at += 200) onOutput(agent, at, false);
+onTick(agent, SUSTAINED_MS + QUIET_MS);
+assert.equal(statusOf(agent), 'attention');
+// The server's command ends and the prompt returns: now it is flagged.
+onOutput(server, 30000, false);
+server.atPrompt = true;
+onTick(server, 30000 + QUIET_MS);
+assert.equal(statusOf(server), 'attention');
 
 // --- With Claude Code hooks ---
 const h = {};
@@ -77,7 +98,7 @@ onHook(w, 'working', 62000);
 onHook(w, 'notify', 63000, 'permission_prompt');
 assert.equal(w.why, 'needs permission');
 assert.equal(w.keyClears, true);
-const q = {};
+const q = { atPrompt: true };
 onOutput(q, 0, false);
 onTick(q, QUIET_MS);
 assert.equal(q.why, 'needs input');

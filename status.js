@@ -1,13 +1,18 @@
 // Loaded as a <script> by index.html and with require() by test.js.
 
-// shortcut: without hooks, "needs input" means output arrived while you were not looking
-// and then went quiet (or the bell rang), so a long silent command also trips it. Claude Code
-// sessions report through hooks instead (onHook), which is exact.
+// shortcut: without hooks, "needs input" is a rule of thumb. Output you did not see, then
+// quiet, flags a terminal if the shell is back at its prompt (the command finished), or if
+// the output was a long unbroken stretch (an agent working, then stopping). Short bursts
+// from something still running, like a dev server logging a request, do not. A server that
+// logs without a break for several seconds can still trip it. Claude Code sessions report
+// through hooks instead (onHook), which is exact.
 const QUIET_MS = 2500;
+const SUSTAINED_MS = 4000;
 
 // Call for program output only, not the echo of your own typing.
 // watching: this terminal is the selected one and the window has focus.
 function onOutput(t, now, watching) {
+  if (!t.busy) t.burstStart = now;
   t.lastOutput = now;
   t.busy = true;
   if (t.hooked) {
@@ -20,10 +25,12 @@ function onOutput(t, now, watching) {
   if (!watching) t.unseen = true;
 }
 
+// t.atPrompt: the shell reported a prompt and no command has been entered since (set by the renderer).
 function onTick(t, now) {
   if (t.busy && now - t.lastOutput >= QUIET_MS) {
     t.busy = false;
-    if (t.unseen) {
+    const sustained = t.lastOutput - t.burstStart >= SUSTAINED_MS;
+    if (t.unseen && (t.atPrompt || sustained)) {
       t.attention = true;
       t.why = 'needs input';
     }
@@ -63,4 +70,4 @@ function statusOf(t) {
   return t.attention ? 'attention' : t.exited ? 'exited' : t.busy ? 'working' : 'idle';
 }
 
-if (typeof module !== 'undefined') module.exports = { QUIET_MS, onOutput, onTick, onHook, statusOf };
+if (typeof module !== 'undefined') module.exports = { QUIET_MS, SUSTAINED_MS, onOutput, onTick, onHook, statusOf };

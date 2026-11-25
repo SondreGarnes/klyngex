@@ -313,6 +313,7 @@ async function addTerminal(cwd, opts = {}) {
   term.onKey(({ domEvent }) => {
     t.lastKey = domEvent.key === 'Enter' ? 0 : Date.now();
     t.acted = true;
+    if (domEvent.key === 'Enter') t.atPrompt = false; // a command is running from here on
   });
   body.addEventListener('paste', () => { t.lastKey = Date.now(); }, true);
   term.onResize(({ cols, rows }) => {
@@ -323,10 +324,12 @@ async function addTerminal(cwd, opts = {}) {
   t.setCwd = (dir) => { if (dir && dir !== t.cwd) { t.cwd = dir; save(); refresh(); } };
   term.parser.registerOscHandler(9, (data) => {
     if (!data.startsWith('9;')) return false;
+    t.atPrompt = true; // sent each time the shell shows its prompt
     t.setCwd(data.slice(2).replace(/^"|"$/g, ''));
     return true;
   });
   term.parser.registerOscHandler(7, (data) => {
+    t.atPrompt = true;
     try { t.setCwd(decodeURIComponent(new URL(data).pathname).replace(/^\/(?=[A-Za-z]:)/, '')); } catch {}
     return true;
   });
