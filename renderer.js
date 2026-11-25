@@ -362,6 +362,8 @@ api.onHook((id, event, info) => {
   refresh();
 });
 
+api.onOpenDir((dir) => addTerminal(dir));
+
 api.onExit((id) => {
   const t = terms.get(id);
   if (!t) return;
@@ -437,6 +439,9 @@ document.getElementById('agentWt').onclick = pickThenAdd({ agent: 'worktree' });
   restoring = true; // keep the saved list intact until every terminal is back
   for (const s of saved) await addTerminal(s.cwd, { name: s.name, agent: s.session ? 'agent' : undefined, resume: s.session });
   restoring = false;
+  // Started with the klyngex command: open a terminal in the folder it was typed in.
+  const dir = await api.launchDir();
+  if (dir) await addTerminal(dir);
   if (!terms.size) await addTerminal();
   save();
 })();

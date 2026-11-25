@@ -59,8 +59,20 @@ function showWindow() {
   win.focus();
 }
 
+// The "klyngex" / "kx" command passes the folder it was typed in as --cwd=<folder>.
+function dirFrom(argv) {
+  const arg = argv.find((a) => a.startsWith('--cwd='));
+  const dir = arg && path.resolve(arg.slice(6));
+  return dir && fs.existsSync(dir) ? dir : null;
+}
+let launchDir = dirFrom(process.argv);
+
 if (!app.requestSingleInstanceLock()) app.quit();
-app.on('second-instance', showWindow);
+app.on('second-instance', (_e, argv) => {
+  showWindow();
+  const dir = dirFrom(argv);
+  if (dir) send('open-dir', dir);
+});
 
 app.whenReady().then(() => {
   // Windows only shows notifications for an app with an id.
@@ -140,6 +152,7 @@ ipcMain.on('pty:resize', (_e, id, cols, rows) => ptys.get(id)?.resize(cols, rows
 ipcMain.on('pty:kill', (_e, id) => ptys.get(id)?.kill());
 ipcMain.on('flash', (_e, on) => win.flashFrame(on && !win.isFocused()));
 ipcMain.on('show-window', showWindow);
+ipcMain.handle('launch-dir', () => { const dir = launchDir; launchDir = null; return dir; });
 ipcMain.handle('pick-folder', async (_e, startAt) => {
   const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'], defaultPath: startAt });
   return r.filePaths[0];

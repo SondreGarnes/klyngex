@@ -26,6 +26,8 @@ Early. Windows only for now; macOS and Linux support will come.
 
 Download `Klyngex-Setup.exe` from [klyngex.com](https://klyngex.com) or the [latest release](https://github.com/SondreGarnes/klyngex/releases/latest) and run it. The installer is not code-signed yet, so Windows shows a "Windows protected your PC" warning: choose "More info", then "Run anyway".
 
+The installer also adds two commands, `klyngex` and the shorter `kx`. Type either in any terminal to open Klyngex with a terminal in that folder; if Klyngex is already open, the terminal is added to it.
+
 ## Run from source
 
 Requires [Node.js](https://nodejs.org) 20 or newer. The agent buttons also need [Claude Code](https://claude.com/claude-code) on your PATH.
