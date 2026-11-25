@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "node -e \"const u=process.env.KLYNGEX_HOOK;if(u)fetch(u+'/start').catch(()=>{})\"" }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "node -e \"const u=process.env.KLYNGEX_HOOK;if(u)fetch(u+'/working').catch(()=>{})\"" }] }
+    ],
+    "Notification": [
+      { "hooks": [{ "type": "command", "command": "node -e \"const u=process.env.KLYNGEX_HOOK;if(u)fetch(u+'/notify').catch(()=>{})\"" }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "node -e \"const u=process.env.KLYNGEX_HOOK;if(u)fetch(u+'/stop').catch(()=>{})\"" }] }
+    ],
+    "SessionEnd": [
+      { "hooks": [{ "type": "command", "command": "node -e \"const u=process.env.KLYNGEX_HOOK;if(u)fetch(u+'/end').catch(()=>{})\"" }] }
+    ]
+  }
+}

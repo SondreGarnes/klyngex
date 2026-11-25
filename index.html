@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>Klyngex</title>
+<link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css">
+<style>
+  html, body { height: 100%; margin: 0; }
+  body { display: flex; background: #111; color: #ddd; font: 13px "Segoe UI", system-ui, sans-serif; }
+  #side { width: 240px; flex: none; display: flex; flex-direction: column; background: #1a1a1a; border-right: 1px solid #2c2c2c; }
+  #buttons { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; }
+  #view { width: 100%; }
+  button { background: #2c2c2c; color: #ddd; border: 1px solid #3d3d3d; border-radius: 4px; padding: 5px 8px; font: inherit; cursor: pointer; }
+  button:hover { background: #3a3a3a; }
+  #buttons button { flex: 1 1 40%; white-space: nowrap; }
+  #list { flex: 1; overflow-y: auto; }
+  .item { display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-left: 3px solid transparent; }
+  .item:hover { background: #242424; }
+  .item.active { background: #2a2a2a; border-left-color: #bbb; }
+  .text { flex: 1; min-width: 0; }
+  .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .state { font-size: 11px; color: #8a8a8a; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; border: 2px solid #666; box-sizing: border-box; }
+  .working .dot { background: #4caf50; border-color: #4caf50; animation: pulse 1s infinite alternate; }
+  .item.attention { background: #10263f; box-shadow: inset 0 0 0 2px #3b9eff; }
+  .attention .dot { background: #3b9eff; border-color: #3b9eff; }
+  .attention .label { font-weight: 600; color: #fff; }
+  .attention .state { color: #7dbdff; }
+  .exited .dot { border-color: #b55; }
+  .close { border: none; background: none; color: #888; padding: 0 4px; font-size: 16px; }
+  #help { padding: 8px; font-size: 11px; color: #777; line-height: 1.6; border-top: 1px solid #2c2c2c; }
+  #panes { flex: 1; position: relative; min-width: 0; margin: 8px; }
+  .pane { position: absolute; inset: 0; display: none; flex-direction: column; border-radius: 3px; }
+  .pane.active { display: flex; }
+  .head { flex: none; padding: 3px 8px; font-size: 12px; color: #999; background: #1c1c1c; white-space: pre; overflow: hidden; text-overflow: ellipsis; user-select: none; }
+  .pane.active .head { color: #fff; background: #2c2c2c; }
+  .pane.attention .head { color: #cfe6ff; background: #10335a; }
+  .body { flex: 1; min-height: 0; overflow: hidden; }
+  /* Side by side: every pane visible. Rings are box-shadows so they don't change the size xterm fits to. */
+  #panes.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 10px; }
+  .grid .pane { position: relative; inset: auto; display: flex; min-width: 0; overflow: hidden; }
+  .grid .pane.active { box-shadow: 0 0 0 1px #777; }
+  #panes .pane.attention { box-shadow: 0 0 0 2px #3b9eff, 0 0 12px #3b9eff; }
+  #panes.zoom .pane:not(.zoomed) { display: none; }
+  ::-webkit-scrollbar { width: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #555; }
+  @keyframes pulse { to { opacity: 0.35; } }
+  @media (prefers-reduced-motion: reduce) { .working .dot { animation: none; } }
+</style>
+</head>
+<body>
+  <div id="side">
+    <div id="buttons">
+      <button id="new" title="New terminal in the same folder as the current one (Ctrl+Shift+T)">+ Terminal</button>
+      <button id="newIn" title="New terminal in a folder you pick">+ Folder…</button>
+      <button id="agent" title="Start Claude Code in the same folder as the current terminal">+ Agent</button>
+      <button id="agentWt" title="Start Claude Code in a new git worktree of the current folder, so parallel agents don't overwrite each other">+ Worktree agent</button>
+      <button id="view" title="Switch between side by side and one at a time (Ctrl+Shift+G)"></button>
+    </div>
+    <div id="list"></div>
+    <div id="help">
+      Ctrl+Shift+A: next one needing input<br>
+      Ctrl+Tab: next terminal<br>
+      Ctrl+Shift+T / W: new / close<br>
+      Ctrl+Shift+G: side by side on/off<br>
+      Ctrl+Shift+Z: zoom this terminal<br>
+      Shift+Enter: new line in an agent<br>
+      Double-click a name to rename
+    </div>
+  </div>
+  <div id="panes"></div>
+  <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
+  <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+  <script src="node_modules/@xterm/addon-webgl/lib/addon-webgl.js"></script>
+  <script src="status.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

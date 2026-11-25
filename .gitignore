@@ -1,0 +1,10 @@
+node_modules/
+dist/
+
+# Personal notes, not part of the app
+ai-project-playbook.md
+
+# Only the icon files the app, the README and packaging use are tracked
+terminal-agent-app-icons/icon_*.png
+!terminal-agent-app-icons/icon_128x128.png
+!terminal-agent-app-icons/icon_512x512.png
