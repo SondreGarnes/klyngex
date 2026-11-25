@@ -1,18 +1,18 @@
 // Loaded as a <script> by index.html and with require() by test.js.
 
-// shortcut: without hooks, "needs input" is a rule of thumb. Output you did not see, then
-// quiet, flags a terminal if the shell is back at its prompt (the command finished), or if
-// the output was a long unbroken stretch (an agent working, then stopping). Short bursts
-// from something still running, like a dev server logging a request, do not. A server that
-// logs without a break for several seconds can still trip it. Claude Code sessions report
-// through hooks instead (onHook), which is exact.
+// shortcut: without hooks, "expects input" is read off the screen once output you did not
+// see has stopped. A program that is just running, like a dev server, finishes its lines
+// and leaves the cursor at the start of an empty one, so it is never flagged however much
+// it logs. Anything else is taken to be waiting for you: the cursor after some text (a shell
+// prompt, "Continue? (y/n) "), or hidden because the program draws its own input box, as
+// agents do. A line left unfinished on purpose ("Installing... ") and a full-screen program
+// that is not waiting for anything are false positives. Claude Code sessions report through
+// hooks instead (onHook), which is exact.
 const QUIET_MS = 2500;
-const SUSTAINED_MS = 4000;
 
 // Call for program output only, not the echo of your own typing.
 // watching: this terminal is the selected one and the window has focus.
 function onOutput(t, now, watching) {
-  if (!t.busy) t.burstStart = now;
   t.lastOutput = now;
   t.busy = true;
   if (t.hooked) {
@@ -26,11 +26,12 @@ function onOutput(t, now, watching) {
 }
 
 // t.atPrompt: the shell reported a prompt and no command has been entered since (set by the renderer).
-function onTick(t, now) {
+// cursor: where the terminal's cursor is now: 'input' (shown, after some text),
+// 'line-start' (shown, at the start of a line) or 'hidden'.
+function onTick(t, now, cursor) {
   if (t.busy && now - t.lastOutput >= QUIET_MS) {
     t.busy = false;
-    const sustained = t.lastOutput - t.burstStart >= SUSTAINED_MS;
-    if (t.unseen && (t.atPrompt || sustained)) {
+    if (t.unseen && (t.atPrompt || cursor !== 'line-start')) {
       t.attention = true;
       t.why = 'needs input';
     }
@@ -70,4 +71,4 @@ function statusOf(t) {
   return t.attention ? 'attention' : t.exited ? 'exited' : t.busy ? 'working' : 'idle';
 }
 
-if (typeof module !== 'undefined') module.exports = { QUIET_MS, SUSTAINED_MS, onOutput, onTick, onHook, statusOf };
+if (typeof module !== 'undefined') module.exports = { QUIET_MS, onOutput, onTick, onHook, statusOf };

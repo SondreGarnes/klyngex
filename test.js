@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { QUIET_MS, SUSTAINED_MS, onOutput, onTick, onHook, statusOf } = require('./status');
+const { QUIET_MS, onOutput, onTick, onHook, statusOf } = require('./status');
 
 // A shell whose command has finished: it is back at its prompt.
 const t = { atPrompt: true };
@@ -29,23 +29,29 @@ onTick(t, 21000 + QUIET_MS);
 assert.equal(statusOf(t), 'attention');
 
 // --- Something still running (no prompt since the command was entered) ---
-// A dev server logging a request now and then: short bursts, never flagged.
+// A dev server: every line is finished, so the cursor rests at the start of an empty line.
+// Never flagged, not for a single request and not for a long stretch of logging.
 const server = { atPrompt: false };
-for (const at of [0, 10000, 20000]) {
-  onOutput(server, at, false);
-  onOutput(server, at + 800, false);
-  onTick(server, at + 800 + QUIET_MS);
-  assert.equal(statusOf(server), 'idle');
-}
-// An agent without hooks: a long unbroken stretch of output, then it stops. Flagged.
-const agent = { atPrompt: false };
-for (let at = 0; at <= SUSTAINED_MS; at += 200) onOutput(agent, at, false);
-onTick(agent, SUSTAINED_MS + QUIET_MS);
-assert.equal(statusOf(agent), 'attention');
+onOutput(server, 0, false);
+onTick(server, QUIET_MS, 'line-start');
+assert.equal(statusOf(server), 'idle');
+for (let at = 10000; at <= 20000; at += 200) onOutput(server, at, false);
+onTick(server, 20000 + QUIET_MS, 'line-start');
+assert.equal(statusOf(server), 'idle');
+// A program that stops to ask a question: flagged, however little it printed.
+const asking = { atPrompt: false };
+onOutput(asking, 0, false);
+onTick(asking, QUIET_MS, 'input');
+assert.equal(statusOf(asking), 'attention');
+// An agent that draws its own input box with the cursor hidden: flagged when it goes quiet.
+const tui = { atPrompt: false };
+onOutput(tui, 0, false);
+onTick(tui, QUIET_MS, 'hidden');
+assert.equal(statusOf(tui), 'attention');
 // The server's command ends and the prompt returns: now it is flagged.
 onOutput(server, 30000, false);
 server.atPrompt = true;
-onTick(server, 30000 + QUIET_MS);
+onTick(server, 30000 + QUIET_MS, 'input');
 assert.equal(statusOf(server), 'attention');
 
 // --- With Claude Code hooks ---

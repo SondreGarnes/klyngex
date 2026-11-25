@@ -13,6 +13,8 @@ let restoring = false;
 let fontSize = Number(localStorage.fontSize) || DEFAULT_FONT;
 
 const watching = (t) => t.id === activeId && document.hasFocus();
+// Where the cursor rests tells a program waiting for typing from one that is just running (see status.js).
+const cursorOf = (t) => (t.cursorHidden ? 'hidden' : t.term.buffer.active.cursorX > 0 ? 'input' : 'line-start');
 const nameOf = (t) => t.name || t.title || t.cwd.split(/[\\/]/).filter(Boolean).pop() || t.cwd;
 
 function ago(ms) {
@@ -333,6 +335,9 @@ async function addTerminal(cwd, opts = {}) {
     try { t.setCwd(decodeURIComponent(new URL(data).pathname).replace(/^\/(?=[A-Za-z]:)/, '')); } catch {}
     return true;
   });
+  // Programs show and hide the cursor with these two sequences; returning false lets xterm act on them too.
+  term.parser.registerCsiHandler({ prefix: '?', final: 'h' }, (params) => { if (params.includes(25)) t.cursorHidden = false; return false; });
+  term.parser.registerCsiHandler({ prefix: '?', final: 'l' }, (params) => { if (params.includes(25)) t.cursorHidden = true; return false; });
   // Agents set a useful title; a bare shell on Windows just reports its exe path.
   term.onTitleChange((title) => { t.title = /\.exe$/i.test(title) ? '' : title; refresh(); });
   term.onBell(() => {
@@ -382,7 +387,7 @@ api.onExit((id) => {
 
 setInterval(() => {
   const now = Date.now();
-  for (const t of terms.values()) onTick(t, now);
+  for (const t of terms.values()) onTick(t, now, cursorOf(t));
   refresh();
 }, 500);
 
