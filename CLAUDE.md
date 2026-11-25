@@ -7,12 +7,16 @@ Parallel terminal workspace for coding agents. Electron app: many terminals in o
 - Test: `npm test`
 
 ## Where things are
-- `main.js`: window and the pty processes (`@lydell/node-pty`, prebuilt, no compiler needed).
+- `main.js`: window, the pty processes (`@lydell/node-pty`, prebuilt, no compiler needed), the local hook server, the settings files.
 - `preload.js`: the only bridge between the two sides (`window.api`).
-- `renderer.js`: sidebar, xterm.js terminals, shortcuts.
+- `renderer.js`: sidebar, xterm.js terminals, shortcuts, layout, restore.
 - `status.js`: the "needs input" rule, shared by the renderer and `test.js`.
-- `claude-hooks.json`: Claude Code hooks passed with `--settings` to agents started from the app. They call the local HTTP server in `main.js` using the `KLYNGEX_HOOK` env var each terminal gets.
+- `claude-hooks.json`: Claude Code hooks passed with `--settings` to agents started from the app. They POST Claude Code's hook JSON to the server in `main.js`, using the `KLYNGEX_HOOK` env var each terminal gets.
+- `hooks-install.js`: adds or removes those hooks in the user's own Claude Code settings (the "Track typed claude" switch).
+- `docs/`: the landing page for klyngex.com (`index.html`, one file, no build) and the README screenshot.
 
 ## Conventions
 - No bundler, no framework. Plain scripts loaded by `index.html`.
 - The renderer never gets Node access; add to `preload.js` instead.
+- Terminal output and hook payloads are untrusted: validate in `main.js` before using them in a command or opening anything.
+- Windows only for now. Do not claim macOS or Linux support in the README or the landing page.

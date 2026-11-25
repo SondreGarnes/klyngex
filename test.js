@@ -66,4 +66,44 @@ assert.equal(h.hooked, false);
 h.exited = true;
 assert.equal(statusOf(h), 'exited');
 
+// Why it needs you: finished, permission, or just input.
+const w = {};
+onHook(w, 'working', 0);
+onHook(w, 'stop', 1000);
+assert.equal(w.why, 'finished');
+onHook(w, 'notify', 61000, 'idle_prompt'); // reminder keeps the reason
+assert.equal(w.why, 'finished');
+onHook(w, 'working', 62000);
+onHook(w, 'notify', 63000, 'permission_prompt');
+assert.equal(w.why, 'needs permission');
+assert.equal(w.keyClears, true);
+const q = {};
+onOutput(q, 0, false);
+onTick(q, QUIET_MS);
+assert.equal(q.why, 'needs input');
+
+// --- Installing the hooks into someone's Claude Code settings ---
+const { isInstalled, install, uninstall } = require('./hooks-install');
+const ours = require('./claude-hooks.json').hooks;
+const theirs = {
+  model: 'opus',
+  hooks: {
+    Stop: [{ hooks: [{ type: 'command', command: 'say done' }] }],
+    PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'check.sh' }] }],
+  },
+};
+const before = JSON.stringify(theirs);
+const added = install(theirs, ours);
+assert.equal(JSON.stringify(theirs), before); // input untouched
+assert.equal(isInstalled(theirs), false);
+assert.equal(isInstalled(added), true);
+assert.equal(added.model, 'opus');
+assert.equal(added.hooks.Stop.length, 2); // theirs kept, ours added
+assert.equal(added.hooks.PreToolUse.length, 1);
+assert.equal(install(added, ours).hooks.Stop.length, 2); // installing twice does not duplicate
+assert.deepEqual(uninstall(added), theirs); // and removing restores exactly what was there
+assert.deepEqual(uninstall(install({}, ours)), {});
+// Every hook is the same command and does nothing without the env var.
+for (const entries of Object.values(ours)) assert.ok(entries[0].hooks[0].command.includes('KLYNGEX_HOOK;if(u)'));
+
 console.log('ok');

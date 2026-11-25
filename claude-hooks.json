@@ -1,19 +1,19 @@
 {
   "hooks": {
     "SessionStart": [
-      { "hooks": [{ "type": "command", "command": "node -e \"const u=process.env.KLYNGEX_HOOK;if(u)fetch(u+'/start').catch(()=>{})\"" }] }
+      { "hooks": [{ "type": "command", "command": "node -e \"const u=process.env.KLYNGEX_HOOK;if(u){let d='';process.stdin.on('data',c=>d+=c).on('end',()=>fetch(u,{method:'POST',body:d}).catch(()=>{}))}\"" }] }
     ],
     "UserPromptSubmit": [
-      { "hooks": [{ "type": "command", "command": "node -e \"const u=process.env.KLYNGEX_HOOK;if(u)fetch(u+'/working').catch(()=>{})\"" }] }
+      { "hooks": [{ "type": "command", "command": "node -e \"const u=process.env.KLYNGEX_HOOK;if(u){let d='';process.stdin.on('data',c=>d+=c).on('end',()=>fetch(u,{method:'POST',body:d}).catch(()=>{}))}\"" }] }
     ],
     "Notification": [
-      { "hooks": [{ "type": "command", "command": "node -e \"const u=process.env.KLYNGEX_HOOK;if(u)fetch(u+'/notify').catch(()=>{})\"" }] }
+      { "hooks": [{ "type": "command", "command": "node -e \"const u=process.env.KLYNGEX_HOOK;if(u){let d='';process.stdin.on('data',c=>d+=c).on('end',()=>fetch(u,{method:'POST',body:d}).catch(()=>{}))}\"" }] }
     ],
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "node -e \"const u=process.env.KLYNGEX_HOOK;if(u)fetch(u+'/stop').catch(()=>{})\"" }] }
+      { "hooks": [{ "type": "command", "command": "node -e \"const u=process.env.KLYNGEX_HOOK;if(u){let d='';process.stdin.on('data',c=>d+=c).on('end',()=>fetch(u,{method:'POST',body:d}).catch(()=>{}))}\"" }] }
     ],
     "SessionEnd": [
-      { "hooks": [{ "type": "command", "command": "node -e \"const u=process.env.KLYNGEX_HOOK;if(u)fetch(u+'/end').catch(()=>{})\"" }] }
+      { "hooks": [{ "type": "command", "command": "node -e \"const u=process.env.KLYNGEX_HOOK;if(u){let d='';process.stdin.on('data',c=>d+=c).on('end',()=>fetch(u,{method:'POST',body:d}).catch(()=>{}))}\"" }] }
     ]
   }
 }
