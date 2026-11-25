@@ -5,6 +5,7 @@ const http = require('http');
 const os = require('os');
 const path = require('path');
 const pty = require('@lydell/node-pty');
+const { autoUpdater } = require('electron-updater');
 const { isInstalled, install, uninstall } = require('./hooks-install');
 
 const hooksFile = path.join(__dirname, 'claude-hooks.json');
@@ -13,6 +14,7 @@ const EVENTS = { SessionStart: 'start', UserPromptSubmit: 'working', Notificatio
 const ptys = new Map();
 let win;
 let nextId = 1;
+let updating = false;
 
 const send = (...args) => { if (win && !win.isDestroyed()) win.webContents.send(...args); };
 
@@ -87,9 +89,10 @@ app.whenReady().then(() => {
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
   win.loadFile('index.html');
+  watchForUpdates();
   win.on('focus', () => win.flashFrame(false));
   win.on('close', (e) => {
-    if (!ptys.size) return;
+    if (!ptys.size || updating) return;
     const choice = dialog.showMessageBoxSync(win, {
       type: 'warning',
       buttons: ['Close and kill them', 'Cancel'],
@@ -101,6 +104,30 @@ app.whenReady().then(() => {
     if (choice === 1) e.preventDefault();
   });
 });
+
+// Updates come from the GitHub releases. A new version is downloaded in the background and
+// the user is asked once it is ready; "Later" installs it the next time Klyngex is closed.
+function watchForUpdates() {
+  if (!app.isPackaged) return;
+  autoUpdater.on('error', () => {}); // offline or no release yet: try again next time
+  autoUpdater.on('update-downloaded', (info) => {
+    const choice = dialog.showMessageBoxSync(win, {
+      type: 'info',
+      buttons: ['Restart now', 'Later'],
+      defaultId: 1,
+      cancelId: 1,
+      message: `Klyngex ${info.version} is ready to install.`,
+      detail: 'Restarting stops the running terminals; Claude Code agents are reopened where they left off. "Later" installs the update when you close Klyngex.',
+    });
+    if (choice === 0) {
+      updating = true;
+      autoUpdater.quitAndInstall();
+    }
+  });
+  const check = () => autoUpdater.checkForUpdates().catch(() => {});
+  check();
+  setInterval(check, 6 * 60 * 60 * 1000);
+}
 
 app.on('window-all-closed', () => {
   for (const p of ptys.values()) p.kill();
