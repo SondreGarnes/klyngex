@@ -59,25 +59,19 @@ Double-click a name in the sidebar to rename a terminal. Double-click a pane hea
 
 ## Settings
 
-The `Settings…` button opens a small JSON file:
+The `Settings…` button at the bottom of the sidebar opens a settings page:
 
-```json
-{
-  "shell": "powershell.exe",
-  "shellArgs": [],
-  "agent": "claude"
-}
-```
+- **Shell** and **shell arguments**: what every new terminal runs. Shells found on your computer are offered, for example PowerShell, Command Prompt, WSL or Git Bash, or type a path.
+- **Agent command**: what the agent buttons start. Any command works; reopening after a restart, worktrees and exact status are Claude Code's and only apply when it is `claude`.
+- **Text size**, and a **tone** when a terminal starts needing input.
+- **Track Claude Code sessions I start by typing `claude`**: see below.
 
-- `shell` and `shellArgs` choose what every new terminal runs, for example `pwsh.exe`, or `C:/Program Files/Git/bin/bash.exe` with `["-i"]`.
-- `agent` is the command the agent buttons start. Any command works; the worktree, resume and exact-status features are Claude Code's and only apply when it is `claude`.
-
-Changes apply to the next terminal you open. Following `cd` in the sidebar works out of the box in PowerShell; other shells need to report their folder themselves (OSC 7).
+Shell and agent changes apply to the next terminal you open. Following `cd` in the sidebar works out of the box in PowerShell; other shells need to report their folder themselves (OSC 7). The version you are running is shown under the Settings button.
 
 ## How "needs input" works
 
 - **Claude Code agents started from the app** are launched with `--settings claude-hooks.json`. Its hooks send Claude Code's own event to a small server that Klyngex runs on `127.0.0.1`, using a per-terminal address in the `KLYNGEX_HOOK` environment variable. Nothing is added to your own Claude Code settings.
-- **Claude Code sessions you start by typing `claude`** are tracked the same way if you switch on `Track typed claude`. That adds the same hooks to your Claude Code `settings.json` (a backup is saved next to it) and switching it off removes them again. The hooks do nothing outside Klyngex.
+- **Claude Code sessions you start by typing `claude`** are tracked the same way if you tick that option on the settings page. That adds the same hooks to your Claude Code `settings.json` (a backup is saved next to it) and switching it off removes them again. The hooks do nothing outside Klyngex.
 - **Everything else** uses a rule of thumb: output that arrived while you were not looking, followed by 2.5 seconds of silence, or a terminal bell. A long silent command can trip it.
 
 ## Development

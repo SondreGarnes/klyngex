@@ -397,31 +397,42 @@ document.getElementById('searchClose').onclick = closeSearch;
 document.getElementById('view').onclick = () => setGrid(!panes.classList.contains('grid'));
 setGrid(localStorage.grid !== ''); // side by side unless switched off
 
-const soundButton = document.getElementById('sound');
-function setSound(on) {
-  localStorage.sound = on ? '1' : '';
-  soundButton.textContent = `Sound: ${on ? 'on' : 'off'}`;
-  soundButton.setAttribute('aria-pressed', on);
-}
-soundButton.onclick = () => { setSound(!localStorage.sound); if (localStorage.sound) beep(); };
-setSound(Boolean(localStorage.sound));
+// --- Settings page ---
+const dialog = document.getElementById('settingsDialog');
+const field = (id) => document.getElementById(id);
+let trackedBefore = false;
 
-// Tracking of sessions started by typing `claude`: adds Klyngex's hooks to the user's own Claude Code settings.
-const manualButton = document.getElementById('manual');
-function showManual(on) {
-  manualButton.textContent = `Track typed claude: ${on ? 'on' : 'off'}`;
-  manualButton.setAttribute('aria-pressed', on);
+async function openSettings() {
+  const [s, hooks] = await Promise.all([api.getSettings(), api.hooksState()]);
+  field('setShell').value = s.shell;
+  field('setArgs').value = (Array.isArray(s.shellArgs) ? s.shellArgs : []).join(' ');
+  field('setAgent').value = s.agent;
+  field('shells').replaceChildren(...s.shells.map((shell) => new Option(shell)));
+  field('setFont').value = fontSize;
+  field('setSound').checked = Boolean(localStorage.sound);
+  trackedBefore = hooks.on;
+  field('setManual').checked = hooks.on;
+  field('manualFile').textContent = hooks.file;
+  dialog.showModal();
 }
-manualButton.onclick = async () => {
-  const { on, file } = await api.hooksState();
-  const question = on
-    ? `Remove the Klyngex hooks from ${file}?`
-    : `Add Klyngex hooks to ${file}?\n\nClaude Code sessions you start by typing "claude" in a Klyngex terminal are then tracked exactly, like the ones started with the agent buttons. The hooks do nothing outside Klyngex. A backup of the file is saved next to it.`;
-  if (confirm(question)) showManual(await api.setHooks(!on));
+
+field('settingsForm').onsubmit = async () => {
+  // shortcut: shell arguments are split on spaces, so an argument cannot contain one; add quoting if someone needs it.
+  await api.setSettings({
+    shell: field('setShell').value,
+    shellArgs: field('setArgs').value.trim().split(/\s+/).filter(Boolean),
+    agent: field('setAgent').value,
+  });
+  setFont(Number(field('setFont').value) || DEFAULT_FONT);
+  const sound = field('setSound').checked;
+  if (sound && !localStorage.sound) beep(); // let them hear what they switched on
+  localStorage.sound = sound ? '1' : '';
+  // Adds or removes Klyngex's hooks in the user's own Claude Code settings (main.js keeps a backup).
+  if (field('setManual').checked !== trackedBefore) await api.setHooks(field('setManual').checked);
 };
-api.hooksState().then(({ on }) => showManual(on));
-
-document.getElementById('settings').onclick = () => api.openSettings();
+field('setCancel').onclick = () => dialog.close();
+dialog.onclose = () => terms.get(activeId)?.term.focus();
+document.getElementById('settings').onclick = openSettings;
 api.version().then((v) => { document.getElementById('version').textContent = `Klyngex ${v}`; });
 
 document.getElementById('new').onclick = () => addTerminal(activeCwd());

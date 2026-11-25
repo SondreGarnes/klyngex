@@ -189,9 +189,26 @@ ipcMain.handle('pick-folder', async (_e, startAt) => {
 // Terminal output is untrusted: only ever hand web links to the system.
 ipcMain.on('open-link', (_e, url) => { if (/^https?:\/\//i.test(String(url))) desktop.openExternal(url); });
 
-ipcMain.on('open-settings', () => {
-  if (!fs.existsSync(settingsFile())) fs.writeFileSync(settingsFile(), JSON.stringify(DEFAULTS, null, 2) + '\n');
-  desktop.openPath(settingsFile());
+// Shells found on this machine, offered as suggestions on the settings page.
+function findShells() {
+  if (process.platform !== 'win32') {
+    return [...new Set([process.env.SHELL, '/bin/zsh', '/bin/bash'].filter((s) => s && fs.existsSync(s)))];
+  }
+  const dirs = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+  const found = ['powershell.exe', 'pwsh.exe', 'cmd.exe', 'wsl.exe'].filter((exe) => dirs.some((d) => fs.existsSync(path.join(d, exe))));
+  const gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe';
+  if (fs.existsSync(gitBash)) found.push(gitBash);
+  return found;
+}
+
+ipcMain.handle('settings:get', () => ({ ...readSettings(), shells: findShells() }));
+ipcMain.handle('settings:set', (_e, s) => {
+  const next = {
+    shell: String(s.shell || '').trim() || DEFAULTS.shell,
+    shellArgs: Array.isArray(s.shellArgs) ? s.shellArgs.map(String) : [],
+    agent: String(s.agent || '').trim() || DEFAULTS.agent,
+  };
+  fs.writeFileSync(settingsFile(), JSON.stringify(next, null, 2) + '\n');
 });
 
 ipcMain.handle('hooks:state', () => {

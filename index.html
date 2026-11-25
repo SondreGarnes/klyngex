@@ -32,6 +32,20 @@
   #options { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; border-top: 1px solid #2c2c2c; }
   #options button { flex: 1 1 40%; white-space: nowrap; font-size: 12px; }
   #help { padding: 0 8px 8px; font-size: 11px; color: #777; line-height: 1.6; }
+  dialog { width: min(520px, 90vw); max-height: 90vh; padding: 0; background: #1f1f1f; color: #ddd; border: 1px solid #555; border-radius: 8px; box-shadow: 0 20px 60px #000c; }
+  dialog::backdrop { background: #000a; }
+  dialog form { display: flex; flex-direction: column; padding: 18px 20px; }
+  dialog h2 { margin: 0 0 6px; font-size: 18px; }
+  dialog label { margin-top: 14px; font-weight: 600; }
+  dialog label.check { display: flex; align-items: center; gap: 8px; font-weight: 400; }
+  dialog input[type="text"], dialog input[type="number"] { margin-top: 5px; padding: 6px 8px; background: #111; color: #ddd; border: 1px solid #3d3d3d; border-radius: 4px; font: 13px "Cascadia Mono", Consolas, monospace; }
+  dialog input[type="number"] { width: 90px; }
+  dialog input:focus-visible { outline: 2px solid #3b9eff; outline-offset: 1px; }
+  dialog .help { margin: 5px 0 0; font-size: 12px; line-height: 1.45; color: #999; overflow-wrap: anywhere; }
+  dialog code { color: #ccc; }
+  dialog .buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  dialog .buttons button { min-width: 84px; }
+  #setSave { background: #1d5fa8; border-color: #3b9eff; color: #fff; }
   #version { padding: 0 8px 8px; font-size: 11px; color: #666; }
   #help summary { cursor: pointer; color: #999; padding: 2px 0; }
   .item[draggable="true"] { -webkit-user-drag: element; }
@@ -72,9 +86,7 @@
     </div>
     <div id="list"></div>
     <div id="options">
-      <button id="sound" title="Play a short tone when a terminal starts needing input"></button>
-      <button id="settings" title="Choose which shell and which agent command to start">Settings…</button>
-      <button id="manual" title="Also track Claude Code sessions you start by typing claude yourself"></button>
+      <button id="settings" title="Shell, agent command, text size, sound and tracking">Settings…</button>
     </div>
     <details id="help">
       <summary>Shortcuts</summary>
@@ -98,6 +110,39 @@
     <input id="searchInput" type="text" placeholder="Search this terminal" aria-label="Search this terminal" title="Enter: next. Shift+Enter: previous. Esc: close.">
     <button id="searchClose" class="close" aria-label="Close search">×</button>
   </div>
+  <dialog id="settingsDialog" aria-labelledby="settingsTitle">
+    <form id="settingsForm" method="dialog">
+      <h2 id="settingsTitle">Settings</h2>
+
+      <label for="setShell">Shell</label>
+      <input id="setShell" type="text" list="shells" spellcheck="false" autocomplete="off">
+      <datalist id="shells"></datalist>
+      <p class="help">The program every new terminal runs. Pick one found on this computer or type a path.</p>
+
+      <label for="setArgs">Shell arguments</label>
+      <input id="setArgs" type="text" spellcheck="false" autocomplete="off" placeholder="none">
+      <p class="help">Optional, separated by spaces. Most shells need none.</p>
+
+      <label for="setAgent">Agent command</label>
+      <input id="setAgent" type="text" list="agents" spellcheck="false" autocomplete="off">
+      <datalist id="agents"><option value="claude"><option value="codex"><option value="gemini"><option value="aider"></datalist>
+      <p class="help">What the agent buttons start. Reopening after a restart, worktrees and exact status only work with <code>claude</code>; other agents are followed by their output.</p>
+
+      <label for="setFont">Text size</label>
+      <input id="setFont" type="number" min="8" max="32" step="1">
+
+      <label class="check"><input id="setSound" type="checkbox"> Play a tone when a terminal starts needing input</label>
+
+      <label class="check"><input id="setManual" type="checkbox"> Track Claude Code sessions I start by typing <code>claude</code></label>
+      <p class="help">Adds Klyngex's hooks to <span id="manualFile"></span> and saves a backup next to it. They do nothing outside Klyngex. Unticking removes them again.</p>
+
+      <p class="help">Shell and agent changes apply to the next terminal you open.</p>
+      <div class="buttons">
+        <button id="setCancel" type="button">Cancel</button>
+        <button id="setSave" type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
   <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
   <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
   <script src="node_modules/@xterm/addon-webgl/lib/addon-webgl.js"></script>
