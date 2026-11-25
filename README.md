@@ -13,6 +13,7 @@ Run several terminals side by side in one window. When an agent finishes or asks
 - **Side by side or one at a time.** A grid that always fills the window, or a single terminal. Zoom any pane to full size and back. Drag the names in the sidebar to reorder.
 - **See who needs you, and why.** A waiting terminal says whether its agent finished or needs permission, and for how long. The ring stays until something is running in that terminal again.
 - **Exact status for Claude Code.** Agents started with `+ Agent` report through Claude Code hooks, so the ring appears the moment Claude stops or asks for permission.
+- **Subagents in a folder.** When a Claude Code agent starts subagents, they appear under its terminal in the sidebar. Click one to read along with what it is doing; Esc goes back to the terminal.
 - **Worktree agents.** `+ Worktree agent` starts Claude Code in a new git worktree of the repo you pick, so parallel agents do not overwrite each other.
 - **Works with anything else too.** Other programs are tracked by their output: a terminal that printed while you were away and then went quiet is flagged.
 - **Picks up where you left off.** Names and folders come back after a restart, and Claude Code sessions reopen with their conversation.

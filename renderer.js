@@ -15,6 +15,8 @@ let fontSize = Number(localStorage.fontSize) || DEFAULT_FONT;
 const watching = (t) => t.id === activeId && document.hasFocus();
 // Where the cursor rests tells a program waiting for typing from one that is just running (see status.js).
 const cursorOf = (t) => (t.cursorHidden ? 'hidden' : t.term.buffer.active.cursorX > 0 ? 'input' : 'line-start');
+// Keys go to the subagent view while it covers the terminal, so nothing is typed blind.
+const focusPane = (t) => (t?.viewing ? t.sub : t?.term)?.focus();
 const nameOf = (t) => t.name || t.title || t.cwd.split(/[\\/]/).filter(Boolean).pop() || t.cwd;
 
 function ago(ms) {
@@ -69,8 +71,12 @@ function refresh() {
     t.item.className = `item ${s}${t.id === activeId ? ' active' : ''}`;
     t.el.classList.toggle('attention', s === 'attention');
     t.el.classList.toggle('zoomed', t.id === zoomId);
-    t.state.textContent = text;
-    t.head.textContent = `${nameOf(t)}  ·  ${text}  ·  ${t.cwd}`;
+    const running = [...t.agents.values()].filter((a) => !a.done).length;
+    t.state.textContent = text + (running ? ` · ${running} agent${running > 1 ? 's' : ''}` : '');
+    const a = t.viewing && t.agents.get(t.viewing.agent);
+    t.head.textContent = a
+      ? `${nameOf(t)}  ›  ${a.title || a.type}  ·  ${a.done ? 'done' : 'running'}  ·  read-only, Esc to go back`
+      : `${nameOf(t)}  ·  ${text}  ·  ${t.cwd}`;
     if (document.activeElement !== t.label) t.label.textContent = nameOf(t);
   }
   panes.classList.toggle('zoom', zoomId !== null);
@@ -95,7 +101,7 @@ function select(id) {
   activeId = id;
   if (zoomId !== null) zoomId = id; // stay zoomed, on the newly selected one
   for (const o of terms.values()) o.el.classList.toggle('active', o === t);
-  t.term.focus();
+  focusPane(t);
   refresh();
 }
 
@@ -132,6 +138,7 @@ function closeTerminal(id, ask) {
   t.term.dispose();
   t.el.remove();
   t.item.remove();
+  t.subs.remove();
   terms.delete(id);
   if (zoomId === id) zoomId = null;
   if (activeId === id) {
@@ -160,12 +167,12 @@ function reorder(order) {
   terms.clear();
   for (const t of order) {
     terms.set(t.id, t);
-    list.append(t.item);
+    list.append(t.item, t.subs);
     panes.append(t.el);
   }
   save();
   refresh();
-  terms.get(activeId)?.term.focus();
+  focusPane(terms.get(activeId));
 }
 
 // Puts terminal `id` where terminal `targetId` is now.
@@ -191,7 +198,61 @@ function openSearch() {
 
 function closeSearch() {
   searchBar.hidden = true;
-  terms.get(activeId)?.term.focus();
+  focusPane(terms.get(activeId));
+}
+
+// --- Subagents: the folder under a Claude Code terminal and the read-only view of one ---
+function renderSubs(t) {
+  t.fold.hidden = !t.agents.size;
+  t.fold.textContent = t.folded ? '▸' : '▾';
+  t.fold.setAttribute('aria-expanded', String(!t.folded));
+  t.subs.replaceChildren(...(t.folded ? [] : [...t.agents].map(([agent, a]) => {
+    const row = document.createElement('button');
+    row.className = `subrow${a.done ? '' : ' working'}${t.viewing?.agent === agent ? ' active' : ''}`;
+    row.innerHTML = '<span class="dot"></span><span class="label"></span>';
+    row.lastChild.textContent = a.title || a.type;
+    row.title = `${a.type}, ${a.done ? 'done' : 'running'}. Click to read along.`;
+    row.onclick = () => openSub(t, agent);
+    return row;
+  })));
+}
+
+function openSub(t, agent) {
+  t.viewing = { agent, next: 0 };
+  t.sub.replaceChildren();
+  t.sub.hidden = false;
+  renderSubs(t);
+  select(t.id);
+  pollSub(t);
+}
+
+function closeSub(t) {
+  if (!t.viewing) return;
+  t.viewing = null;
+  t.sub.hidden = true;
+  renderSubs(t);
+}
+
+// Appends what the subagent has written to its transcript since the last poll.
+async function pollSub(t) {
+  const v = t.viewing;
+  if (!v || v.busy) return;
+  v.busy = true;
+  const r = await api.readSub(t.id, v.agent, v.next);
+  v.busy = false;
+  if (t.viewing !== v) return;
+  v.next = r.next;
+  const a = t.agents.get(v.agent);
+  if (r.title && a && !a.title) { a.title = r.title; renderSubs(t); }
+  if (!r.entries.length) return;
+  const atEnd = t.sub.scrollHeight - t.sub.scrollTop - t.sub.clientHeight < 40;
+  for (const e of r.entries) {
+    const div = document.createElement('div');
+    div.className = e.kind;
+    div.textContent = e.text; // transcript text is untrusted: never as HTML
+    t.sub.append(div);
+  }
+  if (atEnd) t.sub.scrollTop = t.sub.scrollHeight; // follow along unless you scrolled up
 }
 
 const activeCwd = () => terms.get(activeId)?.cwd;
@@ -269,12 +330,20 @@ async function addTerminal(cwd, opts = {}) {
   const id = created.id;
 
   const item = document.createElement('div');
-  item.innerHTML = '<span class="dot"></span><div class="text"><div class="label"></div><div class="state"></div></div><button class="close" title="Close (Ctrl+Shift+W)" aria-label="Close terminal">×</button>';
-  list.append(item);
+  item.innerHTML = '<span class="dot"></span><div class="text"><div class="label"></div><div class="state"></div></div><button class="fold" hidden aria-label="Show or hide its subagents"></button><button class="close" title="Close (Ctrl+Shift+W)" aria-label="Close terminal">×</button>';
+  const subs = document.createElement('div');
+  list.append(item, subs);
+  // The read-only view of a subagent; covers the terminal while open.
+  const sub = document.createElement('div');
+  sub.className = 'sub';
+  sub.hidden = true;
+  sub.tabIndex = 0;
+  body.append(sub);
   const label = item.querySelector('.label');
   const t = {
     id, cwd: created.cwd, name: opts.name, session: opts.resume, term, fit, search, el, item, label,
     head: el.querySelector('.head'), state: item.querySelector('.state'),
+    subs, sub, fold: item.querySelector('.fold'), agents: new Map(),
   };
   terms.set(id, t);
 
@@ -282,7 +351,9 @@ async function addTerminal(cwd, opts = {}) {
   new ResizeObserver(() => { if (body.offsetWidth) fit.fit(); }).observe(body);
   el.addEventListener('mousedown', () => { if (activeId !== id) select(id); });
   t.head.ondblclick = () => toggleZoom(id);
-  item.onclick = () => select(id);
+  item.onclick = () => { closeSub(t); select(id); };
+  t.fold.onclick = (e) => { e.stopPropagation(); t.folded = !t.folded; renderSubs(t); };
+  sub.onkeydown = (e) => { if (e.key === 'Escape') { closeSub(t); select(id); } };
   item.querySelector('.close').onclick = (e) => { e.stopPropagation(); closeTerminal(id, true); };
 
   // Drag a sidebar entry onto another to take its place (Ctrl+Shift+Up/Down does the same).
@@ -361,6 +432,27 @@ api.onData((id, data) => {
 api.onHook((id, event, info) => {
   const t = terms.get(id);
   if (!t) return;
+  if (info.agent) {
+    // Subagents say nothing about whether the terminal needs you, so status.js never sees them.
+    if (event === 'sub-start') {
+      const a = { type: info.agent.type };
+      t.agents.set(info.agent.id, a);
+      // Its short description is on disk a moment after it starts; until then the row shows the type.
+      setTimeout(async () => { a.title = a.title || (await api.readSub(id, info.agent.id, 0)).title; renderSubs(t); }, 2000);
+    } else if (t.agents.has(info.agent.id)) t.agents.get(info.agent.id).done = true;
+    renderSubs(t);
+    refresh();
+    return;
+  }
+  if (event === 'start' || event === 'end') {
+    // Finished ones stay to be read until the session starts over, except the one you are reading.
+    // (Not cleared per prompt: a background agent reporting back counts as a prompt.)
+    for (const [agent, a] of t.agents) {
+      if (event === 'end') a.done = true; // they stop with claude
+      if (a.done && t.viewing?.agent !== agent) t.agents.delete(agent);
+    }
+    renderSubs(t);
+  }
   onHook(t, event, Date.now(), info.kind);
   // Kept so the session can be reopened after a restart; gone once claude has exited.
   t.session = event === 'end' ? undefined : info.session || t.session;
@@ -379,6 +471,9 @@ api.onExit((id) => {
   t.busy = false;
   t.hooked = false;
   t.session = undefined;
+  closeSub(t);
+  t.agents.clear();
+  renderSubs(t);
   if (!watching(t)) { t.attention = true; t.why = LABEL.exited; }
   t.term.write('\r\n[process exited]\r\n');
   save();
@@ -387,11 +482,11 @@ api.onExit((id) => {
 
 setInterval(() => {
   const now = Date.now();
-  for (const t of terms.values()) onTick(t, now, cursorOf(t));
+  for (const t of terms.values()) { onTick(t, now, cursorOf(t)); pollSub(t); }
   refresh();
 }, 500);
 
-window.addEventListener('focus', () => { if (searchBar.hidden) terms.get(activeId)?.term.focus(); });
+window.addEventListener('focus', () => { if (searchBar.hidden) focusPane(terms.get(activeId)); });
 
 searchInput.oninput = () => terms.get(activeId)?.search.findNext(searchInput.value, { incremental: true });
 searchInput.onkeydown = (e) => {
@@ -439,7 +534,7 @@ field('settingsForm').onsubmit = async () => {
   if (field('setManual').checked !== trackedBefore) await api.setHooks(field('setManual').checked);
 };
 field('setCancel').onclick = () => dialog.close();
-dialog.onclose = () => terms.get(activeId)?.term.focus();
+dialog.onclose = () => focusPane(terms.get(activeId));
 document.getElementById('settings').onclick = openSettings;
 api.version().then((v) => { document.getElementById('version').textContent = `Klyngex ${v}`; });
 

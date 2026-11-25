@@ -7,11 +7,16 @@ const path = require('path');
 const pty = require('@lydell/node-pty');
 const { autoUpdater } = require('electron-updater');
 const { isInstalled, install, uninstall } = require('./hooks-install');
+const { subagentFile, entriesOf } = require('./transcript');
 
 const hooksFile = path.join(__dirname, 'claude-hooks.json');
 // Claude Code hook event -> what the renderer calls it.
-const EVENTS = { SessionStart: 'start', UserPromptSubmit: 'working', Notification: 'notify', Stop: 'stop', SessionEnd: 'end' };
+const EVENTS = { SessionStart: 'start', UserPromptSubmit: 'working', Notification: 'notify', Stop: 'stop', SessionEnd: 'end', SubagentStart: 'sub-start', SubagentStop: 'sub-stop' };
 const ptys = new Map();
+// "<terminal id>/<agent id>" -> that subagent's transcript file. The renderer only ever names
+// a subagent by these two ids; the path is worked out and checked here.
+const subFiles = new Map();
+const READ_CHUNK = 4 * 1024 * 1024;
 let win;
 let nextId = 1;
 let updating = false;
@@ -31,7 +36,18 @@ const hookServer = http.createServer((req, res) => {
     try {
       const d = JSON.parse(body);
       const event = EVENTS[d.hook_event_name];
-      if (event) send('hook', Number(id), event, { session: d.session_id, kind: d.notification_type, cwd: d.cwd });
+      if (!event || !ptys.has(Number(id))) return;
+      let agent;
+      if (event === 'sub-start') {
+        const file = subagentFile(path.join(claudeDir(), 'projects'), d.transcript_path, d.agent_id);
+        if (!file) return;
+        subFiles.set(`${Number(id)}/${d.agent_id}`, file);
+      }
+      if (event.startsWith('sub-')) {
+        if (!subFiles.has(`${Number(id)}/${d.agent_id}`)) return;
+        agent = { id: d.agent_id, type: String(d.agent_type || 'agent').slice(0, 60) };
+      }
+      send('hook', Number(id), event, { session: d.session_id, kind: d.notification_type, cwd: d.cwd, agent });
     } catch {}
   });
 }).listen(0, '127.0.0.1');
@@ -49,7 +65,8 @@ function readSettings() {
 }
 
 // --- The user's Claude Code settings, only touched when they switch tracking of typed `claude` on or off ---
-const claudeSettingsFile = () => path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'settings.json');
+const claudeDir = () => process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+const claudeSettingsFile = () => path.join(claudeDir(), 'settings.json');
 function readClaudeSettings() {
   const f = claudeSettingsFile();
   return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8').replace(/^﻿/, '')) : {};
@@ -166,7 +183,11 @@ ipcMain.handle('pty:create', (_e, { cwd, cols, rows, agent, resume }) => {
   const p = pty.spawn(String(s.shell), args, { name: 'xterm-256color', cwd, cols, rows, env });
   ptys.set(id, p);
   p.onData((data) => send('pty:data', id, data));
-  p.onExit(() => { ptys.delete(id); send('pty:exit', id); });
+  p.onExit(() => {
+    ptys.delete(id);
+    for (const key of subFiles.keys()) if (key.startsWith(`${id}/`)) subFiles.delete(key);
+    send('pty:exit', id);
+  });
   if (command && !powershell) {
     // shortcut: other shells get the command typed in once they have printed something; no
     // prompt hook is injected, so folders follow `cd` only if the shell already emits OSC 7.
@@ -177,7 +198,31 @@ ipcMain.handle('pty:create', (_e, { cwd, cols, rows, agent, resume }) => {
 ipcMain.on('pty:write', (_e, id, data) => ptys.get(id)?.write(data));
 ipcMain.on('pty:resize', (_e, id, cols, rows) => ptys.get(id)?.resize(cols, rows));
 ipcMain.on('pty:kill', (_e, id) => ptys.get(id)?.kill());
-ipcMain.on('flash', (_e, on) => win.flashFrame(on && !win.isFocused()));
+// What a subagent has written to its transcript since byte `from`. The view polls this.
+// title: the short description Claude Code gave the subagent, sent with the first read.
+ipcMain.handle('sub:read', (_e, id, agent, from) => {
+  const file = subFiles.get(`${id}/${agent}`);
+  const out = { entries: [], next: from };
+  if (!file || !Number.isSafeInteger(from) || from < 0) return out;
+  try {
+    const fd = fs.openSync(file, 'r');
+    let buf;
+    try {
+      buf = Buffer.alloc(Math.min(Math.max(fs.fstatSync(fd).size - from, 0), READ_CHUNK));
+      fs.readSync(fd, buf, 0, buf.length, from);
+    } finally {
+      fs.closeSync(fd);
+    }
+    // Only whole lines; a half-written one is picked up next time. A single line longer
+    // than the chunk is skipped (its tail then fails to parse and is dropped).
+    const end = buf.lastIndexOf(10) + 1 || (buf.length === READ_CHUNK ? READ_CHUNK : 0);
+    out.entries = entriesOf(buf.toString('utf8', 0, end));
+    out.next = from + end;
+    if (from === 0) out.title = String(JSON.parse(fs.readFileSync(file.replace(/\.jsonl$/, '.meta.json'), 'utf8')).description || '').slice(0, 80);
+  } catch {} // not written yet, or no description: the next poll tries again
+  return out;
+});
+ipcMain.on('flash',(_e, on) => win.flashFrame(on && !win.isFocused()));
 ipcMain.on('show-window', showWindow);
 ipcMain.handle('version', () => app.getVersion());
 ipcMain.handle('launch-dir', () => { const dir = launchDir; launchDir = null; return dir; });

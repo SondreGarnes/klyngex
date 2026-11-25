@@ -14,6 +14,12 @@
     ],
     "SessionEnd": [
       { "hooks": [{ "type": "command", "command": "node -e \"const u=process.env.KLYNGEX_HOOK;if(u){let d='';process.stdin.on('data',c=>d+=c).on('end',()=>fetch(u,{method:'POST',body:d}).catch(()=>{}))}\"" }] }
+    ],
+    "SubagentStart": [
+      { "hooks": [{ "type": "command", "command": "node -e \"const u=process.env.KLYNGEX_HOOK;if(u){let d='';process.stdin.on('data',c=>d+=c).on('end',()=>fetch(u,{method:'POST',body:d}).catch(()=>{}))}\"" }] }
+    ],
+    "SubagentStop": [
+      { "hooks": [{ "type": "command", "command": "node -e \"const u=process.env.KLYNGEX_HOOK;if(u){let d='';process.stdin.on('data',c=>d+=c).on('end',()=>fetch(u,{method:'POST',body:d}).catch(()=>{}))}\"" }] }
     ]
   }
 }

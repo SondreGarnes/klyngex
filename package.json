@@ -38,6 +38,7 @@
       "renderer.js",
       "status.js",
       "hooks-install.js",
+      "transcript.js",
       "index.html",
       "claude-hooks.json",
       "terminal-agent-app-icons/app-icon.ico",

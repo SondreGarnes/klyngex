@@ -133,4 +133,26 @@ assert.deepEqual(uninstall(install({}, ours)), {});
 // Every hook is the same command and does nothing without the env var.
 for (const entries of Object.values(ours)) assert.ok(entries[0].hooks[0].command.includes('KLYNGEX_HOOK;if(u)'));
 
+// --- Subagent transcripts ---
+const { subagentFile, entriesOf } = require('./transcript');
+const path = require('path');
+const projects = path.resolve('/home/.claude/projects');
+const session = path.join(projects, 'proj', 'abc.jsonl');
+assert.equal(subagentFile(projects, session, 'a1b2'), path.join(projects, 'proj', 'abc', 'subagents', 'agent-a1b2.jsonl'));
+assert.equal(subagentFile(projects, session, '../../x'), null); // agent id cannot walk out
+assert.equal(subagentFile(projects, path.resolve('/etc/abc.jsonl'), 'a1b2'), null); // nor can the path
+assert.equal(subagentFile(projects, undefined, 'a1b2'), null);
+const lines = [
+  { type: 'user', message: { role: 'user', content: 'find the bug' } },
+  { type: 'user', message: { role: 'user', content: '<system-reminder>\nnot the prompt' } },
+  { type: 'api-request-blob',message: { role: 'assistant', content: [{ type: 'text', text: 'internal copy' }] } },
+  { type: 'assistant', message: { role: 'assistant', content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: 'Looking.' }, { type: 'tool_use', name: 'Bash', input: { command: 'ls' } }] } },
+  { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', content: 'a.js' }] } },
+].map((l) => JSON.stringify(l));
+assert.deepEqual(entriesOf([...lines, '{"half', ''].join('\n')), [
+  { kind: 'prompt', text: 'find the bug' },
+  { kind: 'text', text: 'Looking.' },
+  { kind: 'tool', text: 'Bash  ls' },
+]);
+
 console.log('ok');
