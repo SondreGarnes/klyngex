@@ -9,6 +9,8 @@ const terms = new Map();
 let groups = [];
 try { groups = JSON.parse(localStorage.groups || '[]').filter((g) => g && typeof g === 'string'); } catch {}
 const heads = new Map(); // group name -> its header in the sidebar
+let folded = new Set(); // collapsed groups: header only, their terminals keep running and stay in side by side
+try { folded = new Set(JSON.parse(localStorage.folded || '[]')); } catch {}
 const shownIn = (g) => [...terms.values()].filter((t) => t.group === g && !t.hidden);
 let activeId = null;
 let zoomId = null;
@@ -36,6 +38,7 @@ function save() {
   if (restoring) return;
   localStorage.terms = JSON.stringify([...terms.values()].map((t) => ({ cwd: t.cwd, name: t.name, session: t.session, group: t.group, hidden: t.hidden })));
   localStorage.groups = JSON.stringify(groups);
+  localStorage.folded = JSON.stringify([...folded]);
 }
 
 function notify(t) {
@@ -95,7 +98,14 @@ function refresh() {
   const active = terms.get(activeId);
   const shown = [...terms.values()].filter((t) => inView(t, active));
   for (const t of terms.values()) t.el.classList.toggle('off', !shown.includes(t));
-  for (const [g, h] of heads) h.classList.toggle('active', g === active?.group);
+  for (const [g, h] of heads) {
+    h.classList.toggle('active', g === active?.group);
+    // A collapsed group still says how many terminals it holds and how many need you.
+    const mine = folded.has(g) ? [...terms.values()].filter((t) => t.group === g) : [];
+    const need = mine.filter((t) => statusOf(t) === 'attention').length;
+    h.classList.toggle('attention', need > 0);
+    h.querySelector('.state').textContent = folded.has(g) ? ` ${mine.length}${need ? ` · ${need} need input` : ''}` : '';
+  }
   const n = shown.length;
   const cols = n <= 3 ? n : Math.ceil(Math.sqrt(n));
   const last = n % cols || cols;
@@ -179,8 +189,15 @@ function nextAttention() {
 function groupHead(g) {
   const h = document.createElement('div');
   h.className = 'group';
-  h.innerHTML = '<span class="label"></span>' + (g ? '<button class="close" title="Remove the group. Its terminals keep running." aria-label="Remove group">×</button>' : '');
-  const label = h.firstChild;
+  h.innerHTML = '<button class="fold" aria-label="Collapse or expand the group"></button><span class="label"></span><span class="state"></span>' + (g ? '<button class="close" title="Remove the group. Its terminals keep running." aria-label="Remove group">×</button>' : '');
+  const label = h.querySelector('.label');
+  h.firstChild.textContent = folded.has(g) ? '▸' : '▾';
+  h.firstChild.setAttribute('aria-expanded', String(!folded.has(g)));
+  h.firstChild.onclick = (e) => {
+    e.stopPropagation();
+    if (!folded.delete(g)) folded.add(g);
+    reorder([...terms.values()]);
+  };
   label.textContent = g || 'No group'; // names are typed by the user: never as HTML
   heads.set(g, h);
   h.onclick = () => label.isContentEditable || select((shownIn(g)[0] || [...terms.values()].find((t) => t.group === g))?.id);
@@ -189,6 +206,7 @@ function groupHead(g) {
   if (!g) return h;
   const rename = (to) => {
     groups = groups.flatMap((o) => (o !== g ? [o] : to ? [to] : []));
+    if (folded.delete(g) && to) folded.add(to);
     for (const t of terms.values()) if (t.group === g) t.group = to;
     reorder([...terms.values()]);
   };
@@ -213,7 +231,8 @@ function renderList() {
   list.replaceChildren();
   for (const g of ['', ...groups]) {
     if (groups.length) list.append(groupHead(g));
-    for (const t of terms.values()) if (t.group === g) list.append(t.item, t.subs);
+    // Without groups there are no headers, so nothing can be collapsed.
+    if (!groups.length || !folded.has(g)) for (const t of terms.values()) if (t.group === g) list.append(t.item, t.subs);
   }
 }
 
