@@ -4,7 +4,7 @@ Thanks for wanting to help. Klyngex is small on purpose, so this guide is too.
 
 ## Running it
 
-You need [Node.js](https://nodejs.org) 20 or newer. Klyngex is developed on Windows, the only platform it supports so far.
+You need [Node.js](https://nodejs.org) 20 or newer. Klyngex is developed on Windows; it also runs on macOS.
 
 ```
 git clone https://github.com/SondreGarnes/klyngex.git
@@ -13,7 +13,7 @@ npm install
 npm start
 ```
 
-`npm test` runs the tests for the "needs input" rules and the hook installer. `npm run dist` builds the Windows installer into `dist/`.
+`npm test` runs the tests for the "needs input" rules and the hook installer. `npm run dist` builds the installer for the system you are on into `dist/`.
 
 `CLAUDE.md` lists what each file does. It is written for coding agents, and it is the quickest map for people too.
 
@@ -22,7 +22,7 @@ npm start
 Open an [issue](https://github.com/SondreGarnes/klyngex/issues) and include:
 
 - the Klyngex version (the installer's release, or the commit if you run from source)
-- your Windows version and which shell you use
+- your Windows or macOS version and which shell you use
 - what you did, what you expected and what happened
 - whether the terminal was a plain shell, an agent started with a button, or `claude` typed by hand
 
@@ -34,7 +34,7 @@ For anything larger than a small fix, open an issue first and describe what you 
 
 Changes that are especially welcome:
 
-- macOS and Linux support
+- Linux support, and fixes from people who use Klyngex on a Mac
 - exact status for agents other than Claude Code
 - bug fixes with a test that shows the bug
 

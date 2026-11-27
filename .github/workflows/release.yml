@@ -1,5 +1,6 @@
 name: Release
-# Pushing a tag like v0.1.0 builds the Windows installer and publishes it as a GitHub release.
+# Pushing a tag like v0.1.0 builds the Windows installer and the Mac disk image and publishes
+# them as a GitHub release.
 # The tag must match "version" in package.json.
 on:
   push:
@@ -21,5 +22,21 @@ jobs:
       # One explicit step creates the release. Letting electron-builder publish created two
       # releases for the same tag, because it uploads its files in parallel.
       - run: gh release create "${{ github.ref_name }}" dist/Klyngex-Setup.exe dist/Klyngex-Setup.exe.blockmap dist/latest.yml --title "Klyngex ${{ github.ref_name }}" --generate-notes --latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # Apple Silicon only, and not signed with an Apple certificate (ad-hoc, see "mac" in package.json).
+  mac:
+    needs: windows # the release has to exist before a file can be added to it
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node test.js
+      - run: npx electron-builder --mac --arm64 --publish never
+      - run: gh release upload "${{ github.ref_name }}" dist/Klyngex-arm64.dmg
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

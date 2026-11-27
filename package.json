@@ -12,7 +12,7 @@
   "scripts": {
     "start": "electron .",
     "test": "node test.js",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder"
   },
   "dependencies": {
     "@lydell/node-pty": "^1.1.0",
@@ -48,6 +48,14 @@
       "target": "nsis",
       "icon": "terminal-agent-app-icons/app-icon.ico",
       "artifactName": "Klyngex-Setup.${ext}"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "terminal-agent-app-icons/app-icon.icns",
+      "category": "public.app-category.developer-tools",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "artifactName": "Klyngex-${arch}.${ext}"
     },
     "publish": {
       "provider": "github",

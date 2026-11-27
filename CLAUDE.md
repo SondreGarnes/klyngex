@@ -20,4 +20,4 @@ Parallel terminal workspace for coding agents. Electron app: many terminals in o
 - No bundler, no framework. Plain scripts loaded by `index.html`.
 - The renderer never gets Node access; add to `preload.js` instead.
 - Terminal output and hook payloads are untrusted: validate in `main.js` before using them in a command or opening anything.
-- Windows only for now. Do not claim macOS or Linux support in the README or the landing page.
+- Windows and macOS (Apple Silicon, not signed). The Mac side is written on Windows, so say what was not run on a Mac. Do not claim Linux or Intel Mac support in the README or the landing page.

@@ -4,7 +4,7 @@
 
 Parallel terminal workspace for coding agents.
 
-Run several terminals side by side in one window. When an agent finishes or asks a question, its terminal gets a blue ring, the taskbar flashes and a notification tells you which one it was.
+Run several terminals side by side in one window. When an agent finishes or asks a question, its terminal gets a blue ring, the taskbar flashes (on a Mac the Dock icon bounces) and a notification tells you which one it was.
 
 ![Four terminals side by side; the one whose agent has finished has a blue ring](docs/screenshot.png)
 
@@ -17,17 +17,19 @@ Run several terminals side by side in one window. When an agent finishes or asks
 - **Worktree agents.** `+ Worktree agent` starts Claude Code in a new git worktree of the repo you pick, so parallel agents do not overwrite each other.
 - **Works with anything else too.** Other programs are tracked by their output: a terminal that printed while you were away and then went quiet is flagged.
 - **Picks up where you left off.** Names and folders come back after a restart, and Claude Code sessions reopen with their conversation.
-- **The usual terminal comforts.** Search, Ctrl+click on links, adjustable text size, an optional tone when a terminal starts waiting.
+- **The usual terminal comforts.** Search, Ctrl+click on links (Cmd+click on a Mac), adjustable text size, an optional tone when a terminal starts waiting.
 
 ## Status
 
-Early. Windows only for now; macOS and Linux support will come.
+Early. Windows, and macOS on Apple Silicon. The Mac version is new and less tested. Linux support will come.
 
 ## Install
 
 Download `Klyngex-Setup.exe` from [klyngex.com](https://klyngex.com) or the [latest release](https://github.com/SondreGarnes/klyngex/releases/latest) and run it. The installer is not code-signed yet, so Windows shows a "Windows protected your PC" warning: choose "More info", then "Run anyway".
 
-The installer also adds two commands, `klyngex` and the shorter `kx`. Type either in any terminal to open Klyngex with a terminal in that folder; if Klyngex is already open, the terminal is added to it.
+**Mac (Apple Silicon):** download `Klyngex-arm64.dmg` from the [latest release](https://github.com/SondreGarnes/klyngex/releases/latest), open it and drag Klyngex to Applications. The app is not signed with an Apple certificate, so macOS refuses to open it the first time: try to open it once, then go to System Settings, Privacy & Security, and choose "Open Anyway". If macOS instead says the app is damaged, run `xattr -cr /Applications/Klyngex.app` in Terminal and open it again. macOS also asks once per folder (Documents, Desktop, Downloads) whether Klyngex may read it, and asks again after each new version because the app is not signed. The Mac version does not update itself, so download the new disk image when there is a new release.
+
+The Windows installer also adds two commands, `klyngex` and the shorter `kx`. Type either in any terminal to open Klyngex with a terminal in that folder; if Klyngex is already open, the terminal is added to it.
 
 ## Run from source
 
@@ -52,9 +54,9 @@ npm start
 | Ctrl+Shift+Up / Ctrl+Shift+Down | Move the current terminal earlier / later |
 | Ctrl+Shift+F | Search in the current terminal |
 | Ctrl+plus / Ctrl+minus / Ctrl+0 | Larger / smaller / default text |
-| Ctrl+click | Open a web link |
+| Ctrl+click (Cmd+click on a Mac) | Open a web link |
 | Shift+Enter | New line (in Claude Code and PowerShell) |
-| Ctrl+C / Ctrl+V | Copy the selection / paste |
+| Ctrl+C / Ctrl+V (Cmd+C / Cmd+V on a Mac) | Copy the selection / paste |
 
 Double-click a name in the sidebar to rename a terminal. Double-click a pane header to zoom it.
 
@@ -62,7 +64,7 @@ Double-click a name in the sidebar to rename a terminal. Double-click a pane hea
 
 The `Settings…` button at the bottom of the sidebar opens a settings page:
 
-- **Shell** and **shell arguments**: what every new terminal runs. Shells found on your computer are offered, for example PowerShell, Command Prompt, WSL or Git Bash, or type a path.
+- **Shell** and **shell arguments**: what every new terminal runs. Shells found on your computer are offered, for example PowerShell, Command Prompt, WSL or Git Bash (zsh or bash on a Mac), or type a path.
 - **Agent command**: what the agent buttons start. Any command works; reopening after a restart, worktrees and exact status are Claude Code's and only apply when it is `claude`.
 - **Text size**, and a **tone** when a terminal starts needing input.
 - **Track Claude Code sessions I start by typing `claude`**: see below.
@@ -79,10 +81,10 @@ Shell and agent changes apply to the next terminal you open. Following `cd` in t
 
 ```
 npm test        # the status and hook rules
-npm run dist    # build dist/Klyngex-Setup.exe
+npm run dist    # build the installer for the system you are on into dist/
 ```
 
-Pushing a tag such as `v0.1.0` (matching `version` in `package.json`) builds the installer on GitHub and publishes it as a release.
+Pushing a tag such as `v0.1.0` (matching `version` in `package.json`) builds the Windows installer and the Mac disk image on GitHub and publishes them as a release.
 
 Plain Electron with [xterm.js](https://xtermjs.org) and [node-pty](https://github.com/lydell/node-pty). No bundler and no framework. `CLAUDE.md` describes where things are. The landing page for klyngex.com is `docs/index.html`.
 

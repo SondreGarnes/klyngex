@@ -20,6 +20,7 @@ const READ_CHUNK = 4 * 1024 * 1024;
 let win;
 let nextId = 1;
 let updating = false;
+const mac = process.platform === 'darwin';
 
 const send = (...args) => { if (win && !win.isDestroyed()) win.webContents.send(...args); };
 
@@ -55,8 +56,9 @@ const hookServer = http.createServer((req, res) => {
 // --- Klyngex's own settings: which shell and which agent command to start ---
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 const DEFAULTS = {
-  shell: process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || 'bash',
-  shellArgs: [],
+  shell: process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/zsh',
+  // An app started from the Finder gets a bare PATH; a login shell reads the profile that adds node and claude.
+  shellArgs: mac ? ['-l'] : [],
   agent: 'claude',
 };
 function readSettings() {
@@ -95,9 +97,10 @@ app.on('second-instance', (_e, argv) => {
 
 app.whenReady().then(() => {
   // Windows only shows notifications for an app with an id.
-  app.setAppUserModelId(app.isPackaged ? 'com.klyngex.app' : process.execPath);
+  if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'com.klyngex.app' : process.execPath);
   // The default menu steals Ctrl+W and Ctrl+R, which shells and agents need.
-  Menu.setApplicationMenu(null);
+  // On a Mac the menu is what makes Cmd+C, Cmd+V and Cmd+Q work, and it only uses Cmd.
+  Menu.setApplicationMenu(mac ? Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }]) : null);
   win = new BrowserWindow({
     width: 1300,
     height: 800,
@@ -125,7 +128,8 @@ app.whenReady().then(() => {
 // Updates come from the GitHub releases. A new version is downloaded in the background and
 // the user is asked once it is ready; "Later" installs it the next time Klyngex is closed.
 function watchForUpdates() {
-  if (!app.isPackaged) return;
+  // shortcut: no update check on a Mac, macOS only installs updates for signed apps; switch on once the build is signed.
+  if (!app.isPackaged || mac) return;
   autoUpdater.on('error', () => {}); // offline or no release yet: try again next time
   autoUpdater.on('update-downloaded', (info) => {
     const choice = dialog.showMessageBoxSync(win, {
@@ -179,7 +183,9 @@ ipcMain.handle('pty:create', (_e, { cwd, cols, rows, agent, resume }) => {
     args.push('-NoExit', '-Command', command ? `${reportCwd}; ${command}` : reportCwd);
   }
 
-  const env = { ...process.env, KLYNGEX_HOOK: `http://127.0.0.1:${hookServer.address().port}/${token}/${id}` };
+  // Started from the Finder there is no locale, and shells then garble anything that is not ASCII.
+  const locale = process.platform === 'win32' || process.env.LANG ? {} : { LANG: 'en_US.UTF-8' };
+  const env = { ...process.env, ...locale, KLYNGEX_HOOK: `http://127.0.0.1:${hookServer.address().port}/${token}/${id}` };
   const p = pty.spawn(String(s.shell), args, { name: 'xterm-256color', cwd, cols, rows, env });
   ptys.set(id, p);
   p.onData((data) => send('pty:data', id, data));

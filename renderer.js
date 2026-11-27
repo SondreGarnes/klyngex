@@ -11,6 +11,7 @@ let dragId = null;
 let lastCount = 0;
 let restoring = false;
 let fontSize = Number(localStorage.fontSize) || DEFAULT_FONT;
+const mac = navigator.platform.startsWith('Mac');
 
 const watching = (t) => t.id === activeId && document.hasFocus();
 // Where the cursor rests tells a program waiting for typing from one that is just running (see status.js).
@@ -276,6 +277,7 @@ function onKey(e, t) {
   if (e.ctrlKey && !e.altKey && !e.shiftKey && key === '0') return run(() => setFont(DEFAULT_FONT));
   // Line feed is what Ctrl+J sends: a new line in Claude Code, same as Enter in most shells.
   if (e.shiftKey && !e.ctrlKey && !e.altKey && key === 'enter') return run(() => api.write(t.id, '\n'));
+  if (mac) return true; // copy and paste are Cmd+C and Cmd+V from the menu; Ctrl+C and Ctrl+V go to the program
   if (e.ctrlKey && !e.shiftKey && key === 'v') return false; // browser paste, which xterm picks up
   if (e.ctrlKey && !e.shiftKey && key === 'c' && t.term.hasSelection()) {
     if (down) setTimeout(() => t.term.clearSelection()); // so the next Ctrl+C interrupts again
@@ -297,7 +299,7 @@ async function addTerminal(cwd, opts = {}) {
   const body = el.querySelector('.body');
 
   const term = new Terminal({
-    fontFamily: '"Cascadia Mono", Consolas, monospace',
+    fontFamily: '"Cascadia Mono", Consolas, Menlo, monospace',
     fontSize,
     scrollback: 10000,
     theme: { background: '#111111' },
@@ -306,8 +308,8 @@ async function addTerminal(cwd, opts = {}) {
   const search = new SearchAddon.SearchAddon();
   term.loadAddon(fit);
   term.loadAddon(search);
-  // Terminal output is untrusted, so links only open on Ctrl+click, and only web links (see main.js).
-  term.loadAddon(new WebLinksAddon.WebLinksAddon((e, url) => { if (e.ctrlKey) api.openLink(url); }));
+  // Terminal output is untrusted, so links only open on Ctrl+click (Cmd+click on a Mac), and only web links (see main.js).
+  term.loadAddon(new WebLinksAddon.WebLinksAddon((e, url) => { if (e.ctrlKey || e.metaKey) api.openLink(url); }));
   term.open(body);
   // GPU renderer, about as fast as a native terminal. Falls back to the DOM one if the context is lost.
   try {
