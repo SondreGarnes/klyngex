@@ -1,7 +1,7 @@
 {
   "name": "klyngex",
   "productName": "Klyngex",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "private": true,
   "description": "Parallel terminal workspace for coding agents.",
   "license": "MIT",
@@ -56,6 +56,12 @@
       "category": "public.app-category.developer-tools",
       "identity": "-",
       "hardenedRuntime": false,
+      "artifactName": "Klyngex-${arch}.${ext}"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "terminal-agent-app-icons/icon_512x512.png",
+      "category": "Development",
       "artifactName": "Klyngex-${arch}.${ext}"
     },
     "publish": {

@@ -73,7 +73,7 @@ const hookServer = http.createServer((req, res) => {
 // --- Klyngex's own settings: which shell and which agent command to start ---
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 const DEFAULTS = {
-  shell: process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/zsh',
+  shell: process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || (mac ? '/bin/zsh' : '/bin/bash'),
   // An app started from the Finder gets a bare PATH; a login shell reads the profile that adds node and claude.
   shellArgs: mac ? ['-l'] : [],
   agent: 'claude',
@@ -146,7 +146,8 @@ app.whenReady().then(() => {
 // the user is asked once it is ready; "Later" installs it the next time Klyngex is closed.
 function watchForUpdates() {
   // shortcut: no update check on a Mac, macOS only installs updates for signed apps; switch on once the build is signed.
-  if (!app.isPackaged || mac) return;
+  // shortcut: none on Linux either, replacing a running AppImage is not tried yet; switch on once it is, and publish latest-linux.yml.
+  if (!app.isPackaged || process.platform !== 'win32') return;
   autoUpdater.on('error', () => {}); // offline or no release yet: try again next time
   autoUpdater.on('update-downloaded', (info) => {
     const choice = dialog.showMessageBoxSync(win, {

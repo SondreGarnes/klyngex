@@ -1,6 +1,6 @@
 name: Release
-# Pushing a tag like v0.1.0 builds the Windows installer and the Mac disk image and publishes
-# them as a GitHub release.
+# Pushing a tag like v0.1.0 builds the Windows installer, the Mac disk image and the Linux
+# AppImage and publishes them as a GitHub release.
 # The tag must match "version" in package.json.
 on:
   push:
@@ -38,5 +38,21 @@ jobs:
       - run: node test.js
       - run: npx electron-builder --mac --arm64 --publish never
       - run: gh release upload "${{ github.ref_name }}" dist/Klyngex-arm64.dmg
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # 64-bit Intel/AMD only. The AppImage does not update itself (see watchForUpdates in main.js).
+  linux:
+    needs: windows # the release has to exist before a file can be added to it
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node test.js
+      - run: npx electron-builder --linux --x64 --publish never
+      - run: gh release upload "${{ github.ref_name }}" dist/Klyngex-x86_64.AppImage
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

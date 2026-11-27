@@ -24,13 +24,15 @@ Run several terminals side by side in one window. When an agent finishes or asks
 
 ## Status
 
-Early. Windows, and macOS on Apple Silicon. The Mac version is new and less tested. Linux support will come.
+Early. Windows, and macOS on Apple Silicon. The Mac version is new and less tested. The Linux version is experimental: it has been built and started in a container, not yet on a Linux desktop.
 
 ## Install
 
 Download `Klyngex-Setup.exe` from [klyngex.com](https://klyngex.com) or the [latest release](https://github.com/SondreGarnes/klyngex/releases/latest) and run it. The installer is not code-signed yet, so Windows shows a "Windows protected your PC" warning: choose "More info", then "Run anyway".
 
 **Mac (Apple Silicon):** download `Klyngex-arm64.dmg` from the [latest release](https://github.com/SondreGarnes/klyngex/releases/latest), open it and drag Klyngex to Applications. The app is not signed with an Apple certificate, so macOS refuses to open it the first time: try to open it once, then go to System Settings, Privacy & Security, and choose "Open Anyway". If macOS instead says the app is damaged, run `xattr -cr /Applications/Klyngex.app` in Terminal and open it again. macOS also asks once per folder (Documents, Desktop, Downloads) whether Klyngex may read it, and asks again after each new version because the app is not signed. The Mac version does not update itself, so download the new disk image when there is a new release.
+
+**Linux (64-bit Intel/AMD, experimental):** download `Klyngex-x86_64.AppImage` from the [latest release](https://github.com/SondreGarnes/klyngex/releases/latest), make it executable (`chmod +x Klyngex-x86_64.AppImage`) and run it. Some distributions need `libfuse2` installed to run an AppImage. If it does not start on a recent Ubuntu, run it with `--no-sandbox`. The Linux version does not update itself.
 
 The Windows installer also adds two commands, `klyngex` and the shorter `kx`. Type either in any terminal to open Klyngex with a terminal in that folder; if Klyngex is already open, the terminal is added to it.
 
@@ -89,7 +91,7 @@ npm test        # the status and hook rules
 npm run dist    # build the installer for the system you are on into dist/
 ```
 
-Pushing a tag such as `v0.1.0` (matching `version` in `package.json`) builds the Windows installer and the Mac disk image on GitHub and publishes them as a release.
+Pushing a tag such as `v0.1.0` (matching `version` in `package.json`) builds the Windows installer, the Mac disk image and the Linux AppImage on GitHub and publishes them as a release.
 
 Plain Electron with [xterm.js](https://xtermjs.org) and [node-pty](https://github.com/lydell/node-pty). No bundler and no framework. `CLAUDE.md` describes where things are. The landing page for klyngex.com is `docs/index.html`.
 
