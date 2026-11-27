@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { QUIET_MS, onOutput, onTick, onHook, statusOf, inView } = require('./status');
+const { QUIET_MS, onOutput, onTick, onHook, statusOf, inView, nextWaiting, clashes, CLASH_MS } = require('./status');
 
 // A shell whose command has finished: it is back at its prompt.
 const t = { atPrompt: true };
@@ -163,4 +163,68 @@ assert.deepEqual(entriesOf([...lines, '{"half', ''].join('\n')), [
   { kind: 'tool', text: 'Bash  ls' },
 ]);
 
-console.log('ok');
+// Jumping goes to the one that has waited longest, then the next longest, then around again.
+const w1 = { attention: true, since: 30 }, w2 = { attention: true, since: 10 }, w3 = { attention: true }, calm = {};
+assert.equal(nextWaiting([w1, calm, w2, w3], calm), w2);
+assert.equal(nextWaiting([w1, calm, w2, w3], w2), w1);
+assert.equal(nextWaiting([w1, calm, w2, w3], w1), w3);
+assert.equal(nextWaiting([w1, calm, w2, w3], w3), w2);
+assert.equal(nextWaiting([calm], calm), undefined);
+
+// Two agents editing the same file are told about each other, until the edits are old.
+const e1 = { edits: new Map([['/r/a.js', 1000], ['/r/b.js', 1000]]) }, e2 = { edits: new Map([['/r/b.js', 2000]]) }, e3 = { edits: new Map([['/r/c.js', 2000]]) }, e4 = {};
+const hit = clashes([e1, e2, e3, e4], 3000);
+assert.deepEqual(hit.get(e1), { file: '/r/b.js', other: e2 });
+assert.deepEqual(hit.get(e2), { file: '/r/b.js', other: e1 });
+assert.equal(hit.size, 2); // a file only one of them touched is no clash
+assert.equal(clashes([e1, e2], 1000 + CLASH_MS).size, 0); // one of the two edits is too old
+
+// --- Worktree agents: needs git, and works in a folder of its own under the temp folder ---
+(async () => {
+  const fs = require('fs');
+  const os = require('os');
+  const { execFileSync } = require('child_process');
+  const worktree = require('./worktree');
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'klyngex-test-'));
+  const wt = path.join(repo, '.claude', 'worktrees', 'x');
+  const git = (dir, ...args) => execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { stdio: 'pipe' });
+  try {
+    git(repo, 'init', '-q', '-b', 'main');
+    fs.writeFileSync(path.join(repo, 'a.txt'), 'one\n');
+    git(repo, 'add', '.');
+    git(repo, 'commit', '-qm', 'one');
+    git(repo, 'worktree', 'add', '-q', wt, '-b', 'worktree-x');
+
+    assert.equal(await worktree.info(repo), null); // the repo itself is not a worktree
+    assert.equal(await worktree.info(os.tmpdir()), null); // nor is a folder outside git
+    assert.deepEqual(await worktree.info(wt), { branch: 'worktree-x', base: 'main', files: 0, added: 0, removed: 0, uncommitted: 0 });
+
+    fs.writeFileSync(path.join(wt, 'a.txt'), 'one\ntwo\n');
+    fs.writeFileSync(path.join(wt, 'new.txt'), 'new\n');
+    assert.deepEqual(await worktree.info(wt), { branch: 'worktree-x', base: 'main', files: 1, added: 1, removed: 0, uncommitted: 2 });
+    const shown = await worktree.diff(wt);
+    assert.ok(shown.includes('+two') && shown.includes('not added to git yet: new.txt'));
+    assert.match(await worktree.merge(wt), /not committed/); // nothing is merged behind uncommitted work
+    assert.equal(fs.readFileSync(path.join(repo, 'a.txt'), 'utf8').trim(), 'one');
+
+    git(wt, 'add', '.');
+    git(wt, 'commit', '-qm', 'two');
+    // The same line changed on main: the merge cannot go through, and main is left as it was.
+    fs.writeFileSync(path.join(repo, 'a.txt'), 'one\nother\n');
+    git(repo, 'commit', '-qam', 'other');
+    assert.match(await worktree.merge(wt), /Could not merge/);
+    assert.equal(git(repo, 'status', '--porcelain', '--untracked-files=no').toString(), '');
+    git(repo, 'reset', '-q', '--hard', 'HEAD~1');
+
+    assert.equal(await worktree.merge(wt), '');
+    assert.equal(fs.readFileSync(path.join(repo, 'a.txt'), 'utf8').replace(/\r/g, ''), 'one\ntwo\n');
+    assert.equal((await worktree.info(wt)).files, 0); // all of it is in main now
+
+    assert.equal(await worktree.remove(wt), '');
+    assert.equal(fs.existsSync(wt), false);
+    assert.equal(git(repo, 'branch', '--list', 'worktree-x').toString(), '');
+  } finally {
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
+  console.log('ok');
+})();

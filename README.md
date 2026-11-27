@@ -14,7 +14,10 @@ Run several terminals side by side in one window. When an agent finishes or asks
 - **See who needs you, and why.** A waiting terminal says whether its agent finished or needs permission, and for how long. The ring stays until something is running in that terminal again.
 - **Exact status for Claude Code.** Agents started with `+ Agent` report through Claude Code hooks, so the ring appears the moment Claude stops or asks for permission.
 - **Subagents in a folder.** When a Claude Code agent starts subagents, they appear under its terminal in the sidebar. Click one to read along with what it is doing; Esc goes back to the terminal.
-- **Worktree agents.** `+ Worktree agent` starts Claude Code in a new git worktree of the repo you pick, so parallel agents do not overwrite each other.
+- **Answer from the sidebar.** When Claude Code agents ask for permission, their questions queue up at the top of the sidebar, longest waiting first, with what they want to run. Yes or No there answers without switching terminal.
+- **A warning when two agents edit the same file.** Both are marked in the sidebar with the file and the other agent's name.
+- **Where each agent stands.** Each Claude Code agent shows how many files it has edited and commands it has run since your last prompt.
+- **Worktree agents.** `+ Worktree agent` starts Claude Code in a new git worktree of the repo you pick: a separate copy on its own branch, so parallel agents do not overwrite each other. A line under the agent shows what it has changed, with buttons to read the changes, merge them into your branch, or delete the copy.
 - **Works with anything else too.** Other programs are tracked by their output: a terminal that printed while you were away and then went quiet is flagged.
 - **Picks up where you left off.** Names and folders come back after a restart, and Claude Code sessions reopen with their conversation.
 - **The usual terminal comforts.** Search, Ctrl+click on links (Cmd+click on a Mac), adjustable text size, an optional tone when a terminal starts waiting.
@@ -46,7 +49,9 @@ npm start
 
 | Keys | Action |
 |---|---|
-| Ctrl+Shift+A | Jump to the next terminal that needs input |
+| Ctrl+Shift+A | Jump to the terminal that has waited longest for input; again for the next |
+| Ctrl+1 to Ctrl+9 | Jump to the terminal with that number in the sidebar |
+| Ctrl+Shift+Y / Ctrl+Shift+N | Answer yes / no to the first permission question in the inbox |
 | Ctrl+Tab / Ctrl+Shift+Tab | Next / previous terminal |
 | Ctrl+Shift+T / Ctrl+Shift+W | New terminal / close terminal |
 | Ctrl+Shift+G | Side by side on or off |

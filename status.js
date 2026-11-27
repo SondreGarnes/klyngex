@@ -76,4 +76,28 @@ function inView(t, active) {
   return Boolean(active) && t.group === active.group && (!t.hidden || t === active);
 }
 
-if (typeof module !== 'undefined') module.exports = { QUIET_MS, onOutput, onTick, onHook, statusOf, inView };
+// Two terminals that both edited the same file within this long are told about each other.
+const CLASH_MS = 15 * 60 * 1000;
+
+// t.edits: Map of file path -> when this terminal's agent last edited it.
+// Returns a Map: terminal -> { file, other } for each terminal sharing a recently edited file.
+function clashes(all, now) {
+  const out = new Map();
+  const fresh = (t, file) => now - (t.edits?.get(file) ?? -Infinity) < CLASH_MS;
+  for (const t of all) {
+    for (const file of t.edits?.keys() || []) {
+      const other = fresh(t, file) && all.find((o) => o !== t && fresh(o, file));
+      if (other) { out.set(t, { file, other }); break; }
+    }
+  }
+  return out;
+}
+
+// The terminal to jump to: the one that has waited longest, and on repeated presses the next longest.
+function nextWaiting(all, active) {
+  const at = (t) => t.since || Number.MAX_VALUE; // flagged this instant, not yet timed: last
+  const waiting = all.filter((t) => statusOf(t) === 'attention').sort((a, b) => at(a) - at(b));
+  return waiting[(waiting.indexOf(active) + 1) % waiting.length];
+}
+
+if (typeof module !== 'undefined') module.exports = { QUIET_MS, onOutput, onTick, onHook, statusOf, inView, nextWaiting, clashes, CLASH_MS };

@@ -8,11 +8,17 @@ const pty = require('@lydell/node-pty');
 const { autoUpdater } = require('electron-updater');
 const { isInstalled, install, uninstall } = require('./hooks-install');
 const { subagentFile, entriesOf } = require('./transcript');
+const worktree = require('./worktree');
 
 const hooksFile = path.join(__dirname, 'claude-hooks.json');
 // Claude Code hook event -> what the renderer calls it.
-const EVENTS = { SessionStart: 'start', UserPromptSubmit: 'working', Notification: 'notify', Stop: 'stop', SessionEnd: 'end', SubagentStart: 'sub-start', SubagentStop: 'sub-stop' };
+const EVENTS = { SessionStart: 'start', UserPromptSubmit: 'working', Notification: 'notify', Stop: 'stop', SessionEnd: 'end', SubagentStart: 'sub-start', SubagentStop: 'sub-stop', PermissionRequest: 'ask', PostToolUse: 'tool' };
+// The longest question shown with a Yes button. A longer one is cut, and then only the terminal itself can answer it.
+const ASK_MAX = 2000;
 const ptys = new Map();
+// Terminal id -> the folder its Claude Code session reported. The worktree commands run git
+// there, so the renderer only ever names a terminal, never a path.
+const cwds = new Map();
 // "<terminal id>/<agent id>" -> that subagent's transcript file. The renderer only ever names
 // a subagent by these two ids; the path is worked out and checked here.
 const subFiles = new Map();
@@ -48,7 +54,18 @@ const hookServer = http.createServer((req, res) => {
         if (!subFiles.has(`${Number(id)}/${d.agent_id}`)) return;
         agent = { id: d.agent_id, type: String(d.agent_type || 'agent').slice(0, 60) };
       }
-      send('hook', Number(id), event, { session: d.session_id, kind: d.notification_type, cwd: d.cwd, agent });
+      if (typeof d.cwd === 'string' && path.isAbsolute(d.cwd) && fs.existsSync(d.cwd)) cwds.set(Number(id), d.cwd);
+      // What the tool was asked to do: shown as text and compared, never run or opened.
+      const input = d.tool_input && typeof d.tool_input === 'object' ? d.tool_input : {};
+      const text = (v) => (typeof v === 'string' ? v : undefined);
+      const detail = text(input.command) ?? text(input.file_path) ?? text(input.notebook_path) ?? text(input.url) ?? '';
+      send('hook', Number(id), event, {
+        session: d.session_id, kind: d.notification_type, cwd: d.cwd, agent,
+        tool: text(d.tool_name)?.slice(0, 80),
+        file: (text(input.file_path) ?? text(input.notebook_path))?.slice(0, 1000),
+        detail: detail.slice(0, ASK_MAX),
+        cut: detail.length > ASK_MAX,
+      });
     } catch {}
   });
 }).listen(0, '127.0.0.1');
@@ -191,6 +208,7 @@ ipcMain.handle('pty:create', (_e, { cwd, cols, rows, agent, resume }) => {
   p.onData((data) => send('pty:data', id, data));
   p.onExit(() => {
     ptys.delete(id);
+    cwds.delete(id);
     for (const key of subFiles.keys()) if (key.startsWith(`${id}/`)) subFiles.delete(key);
     send('pty:exit', id);
   });
@@ -228,6 +246,16 @@ ipcMain.handle('sub:read', (_e, id, agent, from) => {
   } catch {} // not written yet, or no description: the next poll tries again
   return out;
 });
+// --- Worktree agents: what the agent changed on its branch, and merging or deleting it (worktree.js) ---
+ipcMain.handle('wt:info', (_e, id) => worktree.info(cwds.get(id)));
+ipcMain.handle('wt:diff', (_e, id) => worktree.diff(cwds.get(id)));
+ipcMain.handle('wt:merge', (_e, id) => worktree.merge(cwds.get(id)));
+// The renderer asks first and closes the terminal after. A shell still standing in the folder keeps Windows from deleting it.
+ipcMain.handle('wt:remove', (_e, id) => worktree.remove(cwds.get(id), () => {
+  const p = ptys.get(id);
+  return p && new Promise((resolve) => { p.onExit(resolve); p.kill(); });
+}));
+
 ipcMain.on('flash',(_e, on) => win.flashFrame(on && !win.isFocused()));
 ipcMain.on('show-window', showWindow);
 ipcMain.handle('version', () => app.getVersion());

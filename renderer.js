@@ -2,6 +2,7 @@ const LABEL = { working: 'working', idle: 'idle', attention: 'needs input', exit
 const DEFAULT_FONT = 14;
 const list = document.getElementById('list');
 const panes = document.getElementById('panes');
+const inbox = document.getElementById('inbox');
 const searchBar = document.getElementById('search');
 const searchInput = document.getElementById('searchInput');
 const terms = new Map();
@@ -25,6 +26,8 @@ const watching = (t) => t.id === activeId && document.hasFocus();
 const cursorOf = (t) => (t.cursorHidden ? 'hidden' : t.term.buffer.active.cursorX > 0 ? 'input' : 'line-start');
 // Keys go to the subagent view while it covers the terminal, so nothing is typed blind.
 const focusPane = (t) => (t?.viewing ? t.sub : t?.term)?.focus();
+const baseName = (file) => file.split(/[\\/]/).pop();
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const nameOf = (t) => t.name || t.title || t.cwd.split(/[\\/]/).filter(Boolean).pop() || t.cwd;
 
 function ago(ms) {
@@ -62,8 +65,13 @@ function beep() {
 function refresh() {
   const now = Date.now();
   let count = 0;
+  const clash = clashes([...terms.values()], now);
   for (const t of terms.values()) {
     const s = statusOf(t);
+    // The question lives as long as the permission prompt it came with.
+    // One that no prompt followed was settled without you, and must not be shown with a later prompt.
+    if (t.ask && s === 'attention') t.ask.shown = true;
+    else if (t.ask && (t.ask.shown || now - t.ask.at > 15000)) t.ask = null;
     if (s === 'attention') {
       count++;
       if (!t.since) {
@@ -78,16 +86,21 @@ function refresh() {
       t.why = '';
     }
     const text = s === 'attention' ? `${t.why}, ${ago(now - t.since)}` : LABEL[s];
-    t.item.className = `item ${s}${t.id === activeId ? ' active' : ''}${t.hidden ? ' hid' : ''}`;
+    const c = clash.get(t);
+    t.item.className = `item ${s}${t.id === activeId ? ' active' : ''}${t.hidden ? ' hid' : ''}${c ? ' clash' : ''}`;
+    // What the agent has done since your last prompt, so you know where it stands without scrolling back.
+    const did = [t.turn.files.size && `${plural(t.turn.files.size, 'file')} edited`, t.turn.cmds && plural(t.turn.cmds, 'command')].filter(Boolean).join(', ');
+    t.item.title = [...t.turn.files].map(baseName).join('\n');
     t.hide.textContent = t.hidden ? 'show' : 'hide';
     t.hide.setAttribute('aria-pressed', String(Boolean(t.hidden)));
     t.el.classList.toggle('attention', s === 'attention');
     t.el.classList.toggle('zoomed', t.id === zoomId);
     const running = [...t.agents.values()].filter((a) => !a.done).length;
-    t.state.textContent = text + (running ? ` · ${running} agent${running > 1 ? 's' : ''}` : '');
-    const a = t.viewing && t.agents.get(t.viewing.agent);
+    t.state.textContent = text + (running ? ` · ${running} agent${running > 1 ? 's' : ''}` : '') + (did ? ` · ${did}` : '')
+      + (c ? ` · ⚠ ${baseName(c.file)} is also edited by ${nameOf(c.other)}` : '');
+    const a = t.viewing && (t.viewing.doc || t.agents.get(t.viewing.agent));
     t.head.textContent = a
-      ? `${nameOf(t)}  ›  ${a.title || a.type}  ·  ${a.done ? 'done' : 'running'}  ·  read-only, Esc to go back`
+      ? `${nameOf(t)}  ›  ${a.title || a.type}${t.viewing.doc ? '' : `  ·  ${a.done ? 'done' : 'running'}`}  ·  read-only, Esc to go back`
       : `${nameOf(t)}  ·  ${text}  ·  ${t.cwd}`;
     if (document.activeElement !== t.label) t.label.textContent = nameOf(t);
   }
@@ -112,6 +125,7 @@ function refresh() {
   panes.style.setProperty('--cols', cols * last);
   shown.forEach((t, i) => { t.el.style.gridColumn = `span ${i < n - last ? last : cols}`; });
 
+  renderInbox();
   document.title = (count ? `(${count}) ` : '') + 'Klyngex';
   if (count > lastCount) api.flash(true);
   if (!count && lastCount) api.flash(false);
@@ -161,6 +175,7 @@ function closeTerminal(id, ask) {
   t.term.dispose();
   t.el.remove();
   t.item.remove();
+  t.wtRow.remove();
   t.subs.remove();
   terms.delete(id);
   if (zoomId === id) zoomId = null;
@@ -178,12 +193,14 @@ function cycle(dir) {
   select(ids[((i < 0 && dir < 0 ? 0 : i) + dir + ids.length) % ids.length]);
 }
 
-// Starts after the current terminal, so repeated presses walk through all flagged ones.
 function nextAttention() {
-  const all = [...terms.values()];
-  const from = all.findIndex((t) => t.id === activeId) + 1;
-  const t = [...all.slice(from), ...all.slice(0, from)].find((t) => statusOf(t) === 'attention');
-  if (t) select(t.id);
+  select(nextWaiting([...terms.values()], terms.get(activeId))?.id);
+}
+
+// Ctrl+1 to 9: the terminal with that number in the sidebar (collapsed groups are not numbered).
+function selectNth(n) {
+  const item = list.querySelectorAll('.item')[n - 1];
+  select([...terms.values()].find((t) => t.item === item)?.id);
 }
 
 function groupHead(g) {
@@ -232,7 +249,7 @@ function renderList() {
   for (const g of ['', ...groups]) {
     if (groups.length) list.append(groupHead(g));
     // Without groups there are no headers, so nothing can be collapsed.
-    if (!groups.length || !folded.has(g)) for (const t of terms.values()) if (t.group === g) list.append(t.item, t.subs);
+    if (!groups.length || !folded.has(g)) for (const t of terms.values()) if (t.group === g) list.append(t.item, t.wtRow, t.subs);
   }
 }
 
@@ -290,6 +307,92 @@ function closeSearch() {
   focusPane(terms.get(activeId));
 }
 
+// --- The inbox: permission questions from every agent, longest waiting first, answered without switching terminal ---
+const asking = () => [...terms.values()].filter((t) => t.ask && t.attention && t.why === 'needs permission').sort((a, b) => a.since - b.since);
+let inboxKey = '';
+
+function answer(t, yes) {
+  if (!t) return;
+  // shortcut: answers by typing into Claude Code's own dialog (1 picks "Yes", Esc cancels). Those keys
+  // are not a documented interface; move to a hook decision if a Claude Code update changes them.
+  api.write(t.id, yes ? '1' : '\x1b');
+  t.attention = false; // comes back with the idle reminder if the answer did not take
+  t.ask = null;
+  refresh();
+}
+
+function renderInbox() {
+  const q = asking();
+  const key = JSON.stringify(q.map((t) => [t.id, nameOf(t), t.ask.tool, t.ask.detail]));
+  if (key === inboxKey) return; // rebuilt only on change, so a click is never lost to a redraw
+  inboxKey = key;
+  inbox.replaceChildren(...q.map((t, i) => {
+    const row = document.createElement('div');
+    row.className = 'ask';
+    row.innerHTML = '<div class="label"></div><div class="what"></div><div class="row"><button class="yes"></button><button class="no"></button></div>';
+    const [label, what, buttons] = row.children;
+    label.textContent = nameOf(t);
+    what.textContent = `${t.ask.tool}${t.ask.detail ? `: ${t.ask.detail}` : ''}`; // from the hook, untrusted: never as HTML
+    row.title = 'Click to open this terminal';
+    row.onclick = () => select(t.id);
+    if (t.ask.cut) {
+      // Too long to show whole, and nothing is approved unseen.
+      buttons.textContent = 'Too long to show here: answer in the terminal.';
+      return row;
+    }
+    buttons.firstChild.textContent = 'Yes';
+    buttons.lastChild.textContent = 'No';
+    if (!i) { buttons.firstChild.title = 'Ctrl+Shift+Y'; buttons.lastChild.title = 'Ctrl+Shift+N'; }
+    buttons.firstChild.onclick = (e) => { e.stopPropagation(); answer(t, true); focusPane(terms.get(activeId)); };
+    buttons.lastChild.onclick = (e) => { e.stopPropagation(); answer(t, false); focusPane(terms.get(activeId)); };
+    return row;
+  }));
+}
+// The shortcuts answer the first question, and only one that is shown in full.
+const answerFirst = (yes) => { const t = asking()[0]; if (t && !t.ask.cut) answer(t, yes); };
+
+// --- Worktree agents: the line under one that says what it changed, with merge and delete ---
+async function loadWt(t) {
+  t.wt = await api.wtInfo(t.id);
+  const w = t.wt;
+  t.wtRow.hidden = !w;
+  if (!w) return;
+  t.wtRow.innerHTML = '<span class="label"></span><button>Changes</button><button>Merge</button><button>Delete</button>';
+  const [label, changes, merge, del] = t.wtRow.children;
+  const pending = w.files || w.uncommitted;
+  label.textContent = `${w.branch}: ${w.files ? `${plural(w.files, 'file')}, +${w.added} −${w.removed}` : 'nothing to merge'}${w.uncommitted ? `, ${w.uncommitted} not committed` : ''}`;
+  t.wtRow.title = `This agent works in its own copy of the repo, on the branch ${w.branch}. Merge brings its work into ${w.base}. Delete removes the copy and the branch.`;
+  changes.onclick = async () => openDoc(t, `changes on ${w.branch}`, await api.wtDiff(t.id));
+  merge.onclick = async () => {
+    if (!confirm(`Merge ${w.branch} into ${w.base}?`)) return;
+    alert((await api.wtMerge(t.id)) || `Merged into ${w.base}.`);
+    loadWt(t);
+  };
+  del.onclick = async () => {
+    const lost = pending ? `Its changes are NOT in ${w.base} and will be lost.` : `Everything in it is already in ${w.base}.`;
+    if (!confirm(`Delete the worktree ${w.branch}?\n\nThe folder and the branch are removed and this terminal is closed. ${lost}`)) return;
+    const failed = await api.wtRemove(t.id);
+    if (failed) alert(failed);
+    else closeTerminal(t.id);
+  };
+}
+
+// A read-only page of text over the terminal, like the subagent view. Lines of a diff are coloured.
+function openDoc(t, title, text) {
+  t.viewing = { doc: { title } };
+  t.sub.className = 'sub doc';
+  t.sub.replaceChildren(...text.split('\n').map((line) => {
+    const div = document.createElement('div');
+    div.className = /^(@@|diff |index |new file)/.test(line) ? 'tool' : line[0] === '+' ? 'add' : line[0] === '-' ? 'del' : '';
+    div.textContent = line || ' '; // from git, untrusted: never as HTML
+    return div;
+  }));
+  t.sub.hidden = false;
+  t.sub.scrollTop = 0;
+  renderSubs(t);
+  select(t.id);
+}
+
 // --- Subagents: the folder under a Claude Code terminal and the read-only view of one ---
 function renderSubs(t) {
   t.fold.hidden = !t.agents.size;
@@ -308,6 +411,7 @@ function renderSubs(t) {
 
 function openSub(t, agent) {
   t.viewing = { agent, next: 0 };
+  t.sub.className = 'sub';
   t.sub.replaceChildren();
   t.sub.hidden = false;
   renderSubs(t);
@@ -325,7 +429,7 @@ function closeSub(t) {
 // Appends what the subagent has written to its transcript since the last poll.
 async function pollSub(t) {
   const v = t.viewing;
-  if (!v || v.busy) return;
+  if (!v || v.busy || v.doc) return;
   v.busy = true;
   const r = await api.readSub(t.id, v.agent, v.next);
   v.busy = false;
@@ -355,6 +459,8 @@ function onKey(e, t) {
   if (e.ctrlKey && e.shiftKey && key === 't') return run(() => addTerminal(activeCwd()));
   if (e.ctrlKey && e.shiftKey && key === 'w') return run(() => closeTerminal(t.id, true));
   if (e.ctrlKey && e.shiftKey && key === 'a') return run(nextAttention);
+  if (e.ctrlKey && e.shiftKey && key === 'y') return run(() => answerFirst(true));
+  if (e.ctrlKey && e.shiftKey && key === 'n') return run(() => answerFirst(false));
   if (e.ctrlKey && e.shiftKey && key === 'g') return run(() => setGrid(!panes.classList.contains('grid')));
   if (e.ctrlKey && e.shiftKey && key === 'z') return run(() => toggleZoom(t.id));
   if (e.ctrlKey && e.shiftKey && key === 'f') return run(openSearch);
@@ -363,6 +469,7 @@ function onKey(e, t) {
   if (e.ctrlKey && !e.altKey && (key === '+' || key === '=')) return run(() => setFont(fontSize + 1));
   if (e.ctrlKey && !e.altKey && !e.shiftKey && key === '-') return run(() => setFont(fontSize - 1));
   if (e.ctrlKey && !e.altKey && !e.shiftKey && key === '0') return run(() => setFont(DEFAULT_FONT));
+  if (e.ctrlKey && !e.altKey && !e.shiftKey && key >= '1' && key <= '9' && key.length === 1) return run(() => selectNth(Number(key)));
   // Line feed is what Ctrl+J sends: a new line in Claude Code, same as Enter in most shells.
   if (e.shiftKey && !e.ctrlKey && !e.altKey && key === 'enter') return run(() => api.write(t.id, '\n'));
   if (mac) return true; // copy and paste are Cmd+C and Cmd+V from the menu; Ctrl+C and Ctrl+V go to the program
@@ -424,6 +531,9 @@ async function addTerminal(cwd, opts = {}) {
   const item = document.createElement('div');
   item.innerHTML = '<span class="dot"></span><div class="text"><div class="label"></div><div class="state"></div></div><button class="fold" hidden aria-label="Show or hide its subagents"></button><button class="hide" title="Hide from side by side. It keeps running, and shows again while you have it selected." aria-label="Hide from side by side"></button><button class="close" title="Close (Ctrl+Shift+W)" aria-label="Close terminal">×</button>';
   const subs = document.createElement('div');
+  const wtRow = document.createElement('div');
+  wtRow.className = 'wt';
+  wtRow.hidden = true;
   // The read-only view of a subagent; covers the terminal while open.
   const sub = document.createElement('div');
   sub.className = 'sub';
@@ -436,6 +546,7 @@ async function addTerminal(cwd, opts = {}) {
     group: groups.includes(group) ? group : '', hidden: opts.hidden, hide: item.querySelector('.hide'), fit, search, el, item, label,
     head: el.querySelector('.head'), state: item.querySelector('.state'),
     subs, sub, fold: item.querySelector('.fold'), agents: new Map(),
+    wtRow, edits: new Map(), turn: { files: new Set(), cmds: 0 },
   };
   terms.set(id, t);
   renderList();
@@ -545,6 +656,25 @@ api.onHook((id, event, info) => {
     refresh();
     return;
   }
+  if (event === 'tool') {
+    // An edit or a command the agent just ran (subagents included).
+    if (info.file) {
+      const file = info.file.replace(/\\/g, '/');
+      t.edits.set(file, Date.now());
+      t.turn.files.add(file);
+    } else t.turn.cmds++;
+    refresh();
+    return;
+  }
+  if (event === 'ask') {
+    // Plan approval and questions to you have other choices than yes and no: those are answered in the terminal.
+    t.ask = info.tool && !['ExitPlanMode', 'AskUserQuestion'].includes(info.tool) ? { tool: info.tool, detail: info.detail, cut: info.cut, at: Date.now() } : null;
+    refresh();
+    return;
+  }
+  if (event === 'working') t.turn = { files: new Set(), cmds: 0 };
+  if (event === 'working' || event === 'stop') t.ask = null;
+  if (event === 'start' || event === 'end') t.edits.clear();
   if (event === 'start' || event === 'end') {
     // Finished ones stay to be read until the session starts over, except the one you are reading.
     // (Not cleared per prompt: a background agent reporting back counts as a prompt.)
@@ -559,6 +689,7 @@ api.onHook((id, event, info) => {
   t.session = event === 'end' ? undefined : info.session || t.session;
   // A worktree agent works in its own folder, which only the hook knows.
   if (event === 'start') t.setCwd(info.cwd);
+  if (event === 'start' || event === 'stop') loadWt(t);
   save();
   refresh();
 });
@@ -574,6 +705,9 @@ api.onExit((id) => {
   t.session = undefined;
   closeSub(t);
   t.agents.clear();
+  t.edits.clear();
+  t.ask = null;
+  t.wtRow.hidden = true;
   renderSubs(t);
   if (!watching(t)) { t.attention = true; t.why = LABEL.exited; }
   t.term.write('\r\n[process exited]\r\n');
