@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { QUIET_MS, onOutput, onTick, onHook, statusOf } = require('./status');
+const { QUIET_MS, onOutput, onTick, onHook, statusOf, inView } = require('./status');
 
 // A shell whose command has finished: it is back at its prompt.
 const t = { atPrompt: true };
@@ -108,6 +108,14 @@ const q = { atPrompt: true };
 onOutput(q, 0, false);
 onTick(q, QUIET_MS);
 assert.equal(q.why, 'needs input');
+
+// --- Which terminals side by side shows ---
+const a1 = { group: '' }, a2 = { group: '', hidden: true }, b1 = { group: 'api' };
+assert.equal(inView(a1, a1), true);
+assert.equal(inView(a2, a1), false); // hidden: runs in the background
+assert.equal(inView(a2, a2), true); // but shows while it is the selected one
+assert.equal(inView(b1, a1), false); // another group has its own view
+assert.equal(inView(a1, undefined), false);
 
 // --- Installing the hooks into someone's Claude Code settings ---
 const { isInstalled, install, uninstall } = require('./hooks-install');

@@ -10,7 +10,7 @@ Run several terminals side by side in one window. When an agent finishes or asks
 
 ## Features
 
-- **Side by side or one at a time.** A grid that always fills the window, or a single terminal. Zoom any pane to full size and back. Drag the names in the sidebar to reorder.
+- **Side by side or one at a time.** A grid that always fills the window, or a single terminal. Zoom any pane to full size and back. Drag the names in the sidebar to reorder. Hide a terminal to let it run in the background, or sort terminals into groups that each have their own side by side.
 - **See who needs you, and why.** A waiting terminal says whether its agent finished or needs permission, and for how long. The ring stays until something is running in that terminal again.
 - **Exact status for Claude Code.** Agents started with `+ Agent` report through Claude Code hooks, so the ring appears the moment Claude stops or asks for permission.
 - **Subagents in a folder.** When a Claude Code agent starts subagents, they appear under its terminal in the sidebar. Click one to read along with what it is doing; Esc goes back to the terminal.

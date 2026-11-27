@@ -5,6 +5,11 @@ const panes = document.getElementById('panes');
 const searchBar = document.getElementById('search');
 const searchInput = document.getElementById('searchInput');
 const terms = new Map();
+// Group names in sidebar order. A terminal's group is one of these, or '' for none.
+let groups = [];
+try { groups = JSON.parse(localStorage.groups || '[]').filter((g) => g && typeof g === 'string'); } catch {}
+const heads = new Map(); // group name -> its header in the sidebar
+const shownIn = (g) => [...terms.values()].filter((t) => t.group === g && !t.hidden);
 let activeId = null;
 let zoomId = null;
 let dragId = null;
@@ -29,7 +34,8 @@ function ago(ms) {
 // Remembered so the same folders, names and Claude Code sessions come back after a restart.
 function save() {
   if (restoring) return;
-  localStorage.terms = JSON.stringify([...terms.values()].map((t) => ({ cwd: t.cwd, name: t.name, session: t.session })));
+  localStorage.terms = JSON.stringify([...terms.values()].map((t) => ({ cwd: t.cwd, name: t.name, session: t.session, group: t.group, hidden: t.hidden })));
+  localStorage.groups = JSON.stringify(groups);
 }
 
 function notify(t) {
@@ -69,7 +75,9 @@ function refresh() {
       t.why = '';
     }
     const text = s === 'attention' ? `${t.why}, ${ago(now - t.since)}` : LABEL[s];
-    t.item.className = `item ${s}${t.id === activeId ? ' active' : ''}`;
+    t.item.className = `item ${s}${t.id === activeId ? ' active' : ''}${t.hidden ? ' hid' : ''}`;
+    t.hide.textContent = t.hidden ? 'show' : 'hide';
+    t.hide.setAttribute('aria-pressed', String(Boolean(t.hidden)));
     t.el.classList.toggle('attention', s === 'attention');
     t.el.classList.toggle('zoomed', t.id === zoomId);
     const running = [...t.agents.values()].filter((a) => !a.done).length;
@@ -84,11 +92,15 @@ function refresh() {
   // 1, 2 and 3 terminals sit in one row; 4 is 2 by 2; after that the grid stays roughly square.
   // A shorter last row is stretched to fill the width: the grid gets cols * last columns,
   // panes in full rows span `last` of them and panes in the last row span `cols`.
-  const n = terms.size;
+  const active = terms.get(activeId);
+  const shown = [...terms.values()].filter((t) => inView(t, active));
+  for (const t of terms.values()) t.el.classList.toggle('off', !shown.includes(t));
+  for (const [g, h] of heads) h.classList.toggle('active', g === active?.group);
+  const n = shown.length;
   const cols = n <= 3 ? n : Math.ceil(Math.sqrt(n));
   const last = n % cols || cols;
   panes.style.setProperty('--cols', cols * last);
-  [...terms.values()].forEach((t, i) => { t.el.style.gridColumn = `span ${i < n - last ? last : cols}`; });
+  shown.forEach((t, i) => { t.el.style.gridColumn = `span ${i < n - last ? last : cols}`; });
 
   document.title = (count ? `(${count}) ` : '') + 'Klyngex';
   if (count > lastCount) api.flash(true);
@@ -144,14 +156,14 @@ function closeTerminal(id, ask) {
   if (zoomId === id) zoomId = null;
   if (activeId === id) {
     activeId = null;
-    select([...terms.keys()].pop());
+    select((shownIn(t.group).pop() || [...terms.values()].pop())?.id);
   }
   save();
   refresh();
 }
 
 function cycle(dir) {
-  const ids = [...terms.keys()];
+  const ids = shownIn(terms.get(activeId)?.group).map((t) => t.id); // stays in the group on screen
   select(ids[(ids.indexOf(activeId) + dir + ids.length) % ids.length]);
 }
 
@@ -163,32 +175,88 @@ function nextAttention() {
   if (t) select(t.id);
 }
 
+function groupHead(g) {
+  const h = document.createElement('div');
+  h.className = 'group';
+  h.innerHTML = '<span class="label"></span>' + (g ? '<button class="close" title="Remove the group. Its terminals keep running." aria-label="Remove group">×</button>' : '');
+  const label = h.firstChild;
+  label.textContent = g || 'No group'; // names are typed by the user: never as HTML
+  heads.set(g, h);
+  h.onclick = () => label.isContentEditable || select((shownIn(g)[0] || [...terms.values()].find((t) => t.group === g))?.id);
+  h.ondragover = (e) => { if (dragId !== null) e.preventDefault(); };
+  h.ondrop = (e) => { e.preventDefault(); toGroup(terms.get(dragId), g); };
+  if (!g) return h;
+  const rename = (to) => {
+    groups = groups.flatMap((o) => (o !== g ? [o] : to ? [to] : []));
+    for (const t of terms.values()) if (t.group === g) t.group = to;
+    reorder([...terms.values()]);
+  };
+  h.lastChild.onclick = (e) => { e.stopPropagation(); rename(''); };
+  label.ondblclick = () => {
+    label.contentEditable = 'plaintext-only';
+    label.focus();
+    document.getSelection().selectAllChildren(label);
+  };
+  label.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); label.blur(); } };
+  label.onblur = () => {
+    label.onblur = null; // the header is rebuilt below, which would blur it again
+    const name = label.textContent.trim();
+    rename(name && !groups.includes(name) ? name : g); // an empty or taken name changes nothing
+  };
+  return h;
+}
+
+// The sidebar: terminals without a group first, then each group under its header.
+function renderList() {
+  heads.clear();
+  list.replaceChildren();
+  for (const g of ['', ...groups]) {
+    if (groups.length) list.append(groupHead(g));
+    for (const t of terms.values()) if (t.group === g) list.append(t.item, t.subs);
+  }
+}
+
 // The sidebar and the grid both follow the order of `terms`.
 function reorder(order) {
   terms.clear();
   for (const t of order) {
     terms.set(t.id, t);
-    list.append(t.item, t.subs);
     panes.append(t.el);
   }
+  renderList();
   save();
   refresh();
   focusPane(terms.get(activeId));
 }
 
-// Puts terminal `id` where terminal `targetId` is now.
+// Moves a terminal to a group: last in it, or first.
+function toGroup(t, g, first) {
+  if (!t) return;
+  const rest = [...terms.values()].filter((o) => o !== t);
+  t.group = g;
+  reorder(first ? [t, ...rest] : [...rest, t]);
+}
+
+// Puts terminal `id` where terminal `targetId` is now, in that terminal's group.
 function moveTo(id, targetId) {
   const order = [...terms.values()];
   const from = order.findIndex((t) => t.id === id);
   const to = order.findIndex((t) => t.id === targetId);
   if (from < 0 || to < 0 || from === to) return;
+  order[from].group = order[to].group;
   order.splice(to, 0, order.splice(from, 1)[0]);
   reorder(order);
 }
 
 function moveBy(id, dir) {
-  const ids = [...terms.keys()];
-  moveTo(id, ids[ids.indexOf(id) + dir]);
+  const t = terms.get(id);
+  const peers = [...terms.values()].filter((o) => o.group === t.group);
+  const peer = peers[peers.indexOf(t) + dir];
+  if (peer) return moveTo(id, peer.id);
+  // At the edge of its group: on into the group above or below.
+  const order = ['', ...groups];
+  const g = order[order.indexOf(t.group) + dir];
+  if (g !== undefined) toGroup(t, g, dir > 0);
 }
 
 function openSearch() {
@@ -332,9 +400,8 @@ async function addTerminal(cwd, opts = {}) {
   const id = created.id;
 
   const item = document.createElement('div');
-  item.innerHTML = '<span class="dot"></span><div class="text"><div class="label"></div><div class="state"></div></div><button class="fold" hidden aria-label="Show or hide its subagents"></button><button class="close" title="Close (Ctrl+Shift+W)" aria-label="Close terminal">×</button>';
+  item.innerHTML = '<span class="dot"></span><div class="text"><div class="label"></div><div class="state"></div></div><button class="fold" hidden aria-label="Show or hide its subagents"></button><button class="hide" title="Hide from side by side. It keeps running, and shows again while you have it selected." aria-label="Hide from side by side"></button><button class="close" title="Close (Ctrl+Shift+W)" aria-label="Close terminal">×</button>';
   const subs = document.createElement('div');
-  list.append(item, subs);
   // The read-only view of a subagent; covers the terminal while open.
   const sub = document.createElement('div');
   sub.className = 'sub';
@@ -343,11 +410,13 @@ async function addTerminal(cwd, opts = {}) {
   body.append(sub);
   const label = item.querySelector('.label');
   const t = {
-    id, cwd: created.cwd, name: opts.name, session: opts.resume, term, fit, search, el, item, label,
+    id, cwd: created.cwd, name: opts.name, session: opts.resume, term,
+    group: opts.group ?? terms.get(previous)?.group ?? '', hidden: opts.hidden, hide: item.querySelector('.hide'), fit, search, el, item, label,
     head: el.querySelector('.head'), state: item.querySelector('.state'),
     subs, sub, fold: item.querySelector('.fold'), agents: new Map(),
   };
   terms.set(id, t);
+  renderList();
 
   // Refit whenever the pane changes size: window resize, view switch, zoom, terminals added or closed.
   new ResizeObserver(() => { if (body.offsetWidth) fit.fit(); }).observe(body);
@@ -356,6 +425,14 @@ async function addTerminal(cwd, opts = {}) {
   item.onclick = () => { closeSub(t); select(id); };
   t.fold.onclick = (e) => { e.stopPropagation(); t.folded = !t.folded; renderSubs(t); };
   sub.onkeydown = (e) => { if (e.key === 'Escape') { closeSub(t); select(id); } };
+  t.hide.onclick = (e) => {
+    e.stopPropagation();
+    t.hidden = !t.hidden;
+    if (t.hidden && id === activeId) select(shownIn(t.group)[0]?.id); // nothing else to show: it stays until you pick another
+    save();
+    refresh();
+    focusPane(terms.get(activeId));
+  };
   item.querySelector('.close').onclick = (e) => { e.stopPropagation(); closeTerminal(id, true); };
 
   // Drag a sidebar entry onto another to take its place (Ctrl+Shift+Up/Down does the same).
@@ -546,6 +623,12 @@ const pickThenAdd = (opts) => async () => {
   const dir = await api.pickFolder(activeCwd());
   if (dir) addTerminal(dir, opts);
 };
+document.getElementById('group').onclick = () => {
+  let n = 1;
+  while (groups.includes(`Group ${n}`)) n++;
+  groups.push(`Group ${n}`);
+  reorder([...terms.values()]);
+};
 document.getElementById('newIn').onclick = pickThenAdd();
 document.getElementById('agent').onclick = pickThenAdd({ agent: 'agent' });
 document.getElementById('agentWt').onclick = pickThenAdd({ agent: 'worktree' });
@@ -554,7 +637,7 @@ document.getElementById('agentWt').onclick = pickThenAdd({ agent: 'worktree' });
   let saved = [];
   try { saved = JSON.parse(localStorage.terms || '[]'); } catch {}
   restoring = true; // keep the saved list intact until every terminal is back
-  for (const s of saved) await addTerminal(s.cwd, { name: s.name, agent: s.session ? 'agent' : undefined, resume: s.session });
+  for (const s of saved) await addTerminal(s.cwd, { name: s.name, group: groups.includes(s.group) ? s.group : '', hidden: Boolean(s.hidden), agent: s.session ? 'agent' : undefined, resume: s.session });
   restoring = false;
   // Started with the klyngex command: open a terminal in the folder it was typed in.
   const dir = await api.launchDir();

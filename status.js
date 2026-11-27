@@ -71,4 +71,9 @@ function statusOf(t) {
   return t.attention ? 'attention' : t.exited ? 'exited' : t.busy ? 'working' : 'idle';
 }
 
-if (typeof module !== 'undefined') module.exports = { QUIET_MS, onOutput, onTick, onHook, statusOf };
+// Side by side shows the selected terminal's group. A hidden terminal only shows while it is the selected one.
+function inView(t, active) {
+  return Boolean(active) && t.group === active.group && (!t.hidden || t === active);
+}
+
+if (typeof module !== 'undefined') module.exports = { QUIET_MS, onOutput, onTick, onHook, statusOf, inView };
