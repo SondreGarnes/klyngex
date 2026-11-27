@@ -552,7 +552,14 @@ async function addTerminal(cwd, opts = {}) {
   renderList();
 
   // Refit whenever the pane changes size: window resize, view switch, zoom, terminals added or closed.
-  new ResizeObserver(() => { if (body.offsetWidth) fit.fit(); }).observe(body);
+  new ResizeObserver(() => {
+    if (!body.offsetWidth) return;
+    fit.fit();
+    // shortcut: output that arrives while the pane is hidden leaves xterm's scroll area one screen
+    // short, so you cannot scroll back down to the end. Nothing public recomputes it; drop this
+    // when xterm is upgraded to a version with the new scrollbar.
+    term._core?.viewport?._innerRefresh?.();
+  }).observe(body);
   el.addEventListener('mousedown', () => { if (activeId !== id) select(id); });
   t.head.ondblclick = () => toggleZoom(id);
   item.onclick = () => { closeSub(t); select(id); };
