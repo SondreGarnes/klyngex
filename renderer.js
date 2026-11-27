@@ -164,7 +164,8 @@ function closeTerminal(id, ask) {
 
 function cycle(dir) {
   const ids = shownIn(terms.get(activeId)?.group).map((t) => t.id); // stays in the group on screen
-  select(ids[(ids.indexOf(activeId) + dir + ids.length) % ids.length]);
+  const i = ids.indexOf(activeId); // -1 when the selected one is hidden: backwards then starts from the last
+  select(ids[((i < 0 && dir < 0 ? 0 : i) + dir + ids.length) % ids.length]);
 }
 
 // Starts after the current terminal, so repeated presses walk through all flagged ones.
@@ -398,6 +399,8 @@ async function addTerminal(cwd, opts = {}) {
     return;
   }
   const id = created.id;
+  // Checked after the wait above: the group may have been renamed or removed meanwhile.
+  const group = opts.group ?? terms.get(previous)?.group;
 
   const item = document.createElement('div');
   item.innerHTML = '<span class="dot"></span><div class="text"><div class="label"></div><div class="state"></div></div><button class="fold" hidden aria-label="Show or hide its subagents"></button><button class="hide" title="Hide from side by side. It keeps running, and shows again while you have it selected." aria-label="Hide from side by side"></button><button class="close" title="Close (Ctrl+Shift+W)" aria-label="Close terminal">×</button>';
@@ -411,7 +414,7 @@ async function addTerminal(cwd, opts = {}) {
   const label = item.querySelector('.label');
   const t = {
     id, cwd: created.cwd, name: opts.name, session: opts.resume, term,
-    group: opts.group ?? terms.get(previous)?.group ?? '', hidden: opts.hidden, hide: item.querySelector('.hide'), fit, search, el, item, label,
+    group: groups.includes(group) ? group : '', hidden: opts.hidden, hide: item.querySelector('.hide'), fit, search, el, item, label,
     head: el.querySelector('.head'), state: item.querySelector('.state'),
     subs, sub, fold: item.querySelector('.fold'), agents: new Map(),
   };
