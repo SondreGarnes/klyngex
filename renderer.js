@@ -11,6 +11,7 @@ let groups = [];
 try { groups = JSON.parse(localStorage.groups || '[]').filter((g) => g && typeof g === 'string'); } catch {}
 const heads = new Map(); // group name -> its header in the sidebar
 let folded = new Set(); // collapsed groups: header only, their terminals keep running and stay in side by side
+let pickedGroup = null; // the group header clicked last: the next new terminal goes there, even if the group is empty
 try { folded = new Set(JSON.parse(localStorage.folded || '[]')); } catch {}
 const shownIn = (g) => [...terms.values()].filter((t) => t.group === g && !t.hidden);
 let activeId = null;
@@ -112,7 +113,7 @@ function refresh() {
   const shown = [...terms.values()].filter((t) => inView(t, active));
   for (const t of terms.values()) t.el.classList.toggle('off', !shown.includes(t));
   for (const [g, h] of heads) {
-    h.classList.toggle('active', g === active?.group);
+    h.classList.toggle('active', g === (pickedGroup ?? active?.group));
     // A collapsed group still says how many terminals it holds and how many need you.
     const mine = folded.has(g) ? [...terms.values()].filter((t) => t.group === g) : [];
     const need = mine.filter((t) => statusOf(t) === 'attention').length;
@@ -135,6 +136,7 @@ function refresh() {
 function select(id) {
   const t = terms.get(id);
   if (!t) return;
+  pickedGroup = null;
   activeId = id;
   if (zoomId !== null) zoomId = id; // stay zoomed, on the newly selected one
   for (const o of terms.values()) o.el.classList.toggle('active', o === t);
@@ -217,13 +219,19 @@ function groupHead(g) {
   };
   label.textContent = g || 'No group'; // names are typed by the user: never as HTML
   heads.set(g, h);
-  h.onclick = () => label.isContentEditable || select((shownIn(g)[0] || [...terms.values()].find((t) => t.group === g))?.id);
+  h.onclick = () => {
+    if (label.isContentEditable) return;
+    select((shownIn(g)[0] || [...terms.values()].find((t) => t.group === g))?.id);
+    pickedGroup = g; // after select, which clears it
+    refresh();
+  };
   h.ondragover = (e) => { if (dragId !== null) e.preventDefault(); };
   h.ondrop = (e) => { e.preventDefault(); toGroup(terms.get(dragId), g); };
   if (!g) return h;
   const rename = (to) => {
     groups = groups.flatMap((o) => (o !== g ? [o] : to ? [to] : []));
     if (folded.delete(g) && to) folded.add(to);
+    if (pickedGroup === g) pickedGroup = to;
     for (const t of terms.values()) if (t.group === g) t.group = to;
     reorder([...terms.values()]);
   };
@@ -526,7 +534,7 @@ async function addTerminal(cwd, opts = {}) {
   }
   const id = created.id;
   // Checked after the wait above: the group may have been renamed or removed meanwhile.
-  const group = opts.group ?? terms.get(previous)?.group;
+  const group = opts.group ?? pickedGroup ?? terms.get(previous)?.group;
 
   const item = document.createElement('div');
   item.innerHTML = '<span class="dot"></span><div class="text"><div class="label"></div><div class="state"></div></div><button class="fold" hidden aria-label="Show or hide its subagents"></button><button class="hide" title="Hide from side by side. It keeps running, and shows again while you have it selected." aria-label="Hide from side by side"></button><button class="close" title="Close (Ctrl+Shift+W)" aria-label="Close terminal">×</button>';
