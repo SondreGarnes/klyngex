@@ -429,6 +429,7 @@ function openSub(t, agent) {
 
 function closeSub(t) {
   if (!t.viewing) return;
+  if (t.agents.get(t.viewing.agent)?.done) t.agents.delete(t.viewing.agent);
   t.viewing = null;
   t.sub.hidden = true;
   renderSubs(t);
@@ -673,7 +674,8 @@ api.onHook((id, event, info) => {
       t.agents.set(info.agent.id, a);
       // Its short description is on disk a moment after it starts; until then the row shows the type.
       setTimeout(async () => { a.title = a.title || (await api.readSub(id, info.agent.id, 0)).title; renderSubs(t); }, 2000);
-    } else if (t.agents.has(info.agent.id)) t.agents.get(info.agent.id).done = true;
+    } else if (t.viewing?.agent !== info.agent.id) t.agents.delete(info.agent.id); // finished: its row goes
+    else t.agents.get(info.agent.id).done = true; // you are reading it: it goes when you close the view
     renderSubs(t);
     refresh();
     return;
@@ -698,8 +700,7 @@ api.onHook((id, event, info) => {
   if (event === 'working' || event === 'stop') t.ask = null;
   if (event === 'start' || event === 'end') t.edits.clear();
   if (event === 'start' || event === 'end') {
-    // Finished ones stay to be read until the session starts over, except the one you are reading.
-    // (Not cleared per prompt: a background agent reporting back counts as a prompt.)
+    // A subagent that never reported its stop goes when the session starts over, except the one you are reading.
     for (const [agent, a] of t.agents) {
       if (event === 'end') a.done = true; // they stop with claude
       if (a.done && t.viewing?.agent !== agent) t.agents.delete(agent);
