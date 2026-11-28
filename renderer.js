@@ -140,8 +140,8 @@ function select(id) {
   activeId = id;
   if (zoomId !== null) zoomId = id; // stay zoomed, on the newly selected one
   for (const o of terms.values()) o.el.classList.toggle('active', o === t);
+  refresh(); // first: it makes the pane visible, and a hidden pane cannot take focus
   focusPane(t);
-  refresh();
 }
 
 function setGrid(on) {
@@ -568,6 +568,13 @@ async function addTerminal(cwd, opts = {}) {
     // when xterm is upgraded to a version with the new scrollbar.
     term._core?.viewport?._innerRefresh?.();
   }).observe(body);
+  // shortcut: when xterm's scroll area is too short for any other reason, the wheel stops before the
+  // end. Scroll the buffer directly then; drop this with the xterm upgrade above.
+  body.addEventListener('wheel', (e) => {
+    const vp = body.querySelector('.xterm-viewport');
+    const b = term.buffer.active;
+    if (e.deltaY > 0 && b.viewportY < b.baseY && vp.scrollHeight - vp.scrollTop - vp.clientHeight < 1) term.scrollLines(3);
+  }, { capture: true, passive: true });
   el.addEventListener('mousedown', () => { if (activeId !== id) select(id); });
   t.head.ondblclick = () => toggleZoom(id);
   item.onclick = () => { closeSub(t); select(id); };
@@ -737,6 +744,13 @@ setInterval(() => {
 }, 500);
 
 window.addEventListener('focus', () => { if (searchBar.hidden) focusPane(terms.get(activeId)); });
+// A click on a pane header, a sidebar button or empty space takes the keyboard away from the terminal
+// (hollow cursor, typing goes nowhere). Give it back unless you clicked into something you type in.
+document.addEventListener('click', () => {
+  const a = document.activeElement;
+  if (dialog.open || a.isContentEditable || a.tagName === 'INPUT' || a.closest('.xterm, .sub')) return;
+  focusPane(terms.get(activeId));
+});
 
 searchInput.oninput = () => terms.get(activeId)?.search.findNext(searchInput.value, { incremental: true });
 searchInput.onkeydown = (e) => {
